@@ -1,0 +1,41 @@
+export type Moneda = 'USD' | 'NIO' | 'MIXTO';
+export type MetodoPago = 'EFECTIVO' | 'TRANSFERENCIA_BAC' | 'USDT';
+export type EstadoGarantia = 'VIGENTE' | 'EXPIRADA' | 'EN_REVISION';
+
+export interface Venta {
+  id: string;
+  numero_factura: string;
+  numero_garantia: string;
+  equipo_id: string;
+  cliente_id: string;
+  precio_venta_usd: number;
+  moneda_cobro: Moneda;
+  monto_cobrado_nio: number | null;
+  monto_cobrado_usd_parte: number | null;
+  tasa_cambio_aplicada: number;
+  ctr_al_momento_usd: number;
+  ganancia_bruta_venta_usd: number;
+  porcentaje_inversor_aplicado: number;
+  ganancia_bruta_inversor_est: number;
+  ganancia_bruta_zeltek_est: number;
+  capital_retorno_inversor_usd: number;
+  reparto_liquidado: boolean;
+  fecha_liquidacion: string | null;
+  metodo_pago: MetodoPago;
+  referencia_pago: string | null;
+  dias_garantia: number;
+  garantia_vence: string;
+  estado_garantia: EstadoGarantia;
+  evidencia_entrega_url: string;
+  justificacion_precio: string | null;
+  pf_tap_ganancia_aplicado: number;
+  pf_tap_garantias_aplicado: number;
+  pf_tap_opex_aplicado: number;
+  pf_tap_reparto_aplicado: number;
+  pf_monto_ganancia_usd: number;
+  pf_monto_garantias_usd: number;
+  pf_monto_opex_usd: number;
+  pf_monto_reparto_usd: number;
+  vendedor_id: string;
+  fecha_venta: string;
+}

@@ -1,0 +1,581 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ═══ ENUMS ═══
+
+enum FuenteInbox {
+  GMAIL_EBAY
+  MANUAL
+}
+
+enum EstadoInbox {
+  pendiente_triage
+  ingresado
+  descartado
+}
+
+enum TipoEquipo {
+  laptop
+  telefono
+  tablet
+  otro
+}
+
+enum CondicionEquipo {
+  NUEVO
+  SEMINUEVO
+}
+
+enum EstadoEquipo {
+  COMPRADO
+  EN_BODEGA_MIAMI
+  EN_TRANSITO
+  EN_TALLER
+  DISPONIBLE
+  VENDIDO
+  EN_RECLAMO
+  DEVUELTO
+}
+
+enum TipoEnvio {
+  aereo
+  maritimo
+}
+
+enum EstadoIncidencia {
+  DISPUTA_ABIERTA
+  RESUELTO
+}
+
+enum PlataformaDisputa {
+  PAYPAL
+  EBAY
+  OTRO
+}
+
+enum TipoCliente {
+  PERSONA_NATURAL
+  EMPRESA
+}
+
+enum Moneda {
+  USD
+  NIO
+  MIXTO
+}
+
+enum MetodoPago {
+  EFECTIVO
+  TRANSFERENCIA_BAC
+  USDT
+}
+
+enum CategoriaGasto {
+  LOGISTICA
+  MARKETING
+  HERRAMIENTAS
+  RENTA
+  SERVICIOS
+  OTRO
+}
+
+enum MotivoPerdida {
+  EXTRAVIO
+  ROBO
+  DISPUTA_PERDIDA
+  DANO_IRREPARABLE
+  OTRO
+}
+
+enum EstadoPerdida {
+  PENDIENTE
+  EN_RECUPERACION
+  RECUPERADO
+}
+
+enum RolUsuario {
+  ADMIN
+  VENDEDOR
+  TECNICO
+}
+
+enum OrigenDato {
+  SISTEMA
+  MIGRACION
+}
+
+enum EstadoAccesorio {
+  disponible
+  asignado_equipo
+  vendido
+  defectuoso
+}
+
+enum TipoAsignacionAccesorio {
+  incluido
+  regalia
+}
+
+enum TipoReparacion {
+  externa
+  garantia
+}
+
+enum EstadoReparacion {
+  RECIBIDO
+  EN_DIAGNOSTICO
+  PRESUPUESTADO
+  EN_REPARACION
+  LISTO
+  ENTREGADO
+  CANCELADO
+}
+
+enum TipoReporte {
+  ESTADO_CUENTA_INVERSOR
+  REPORTE_VENTAS
+  REPORTE_OPEX
+}
+
+enum GeneradorReporte {
+  USUARIO
+  N8N_AUTOMATICO
+}
+
+// ═══ TABLAS ═══
+
+model compras_pendientes {
+  id               String      @id @default(uuid()) @db.Uuid
+  fuente           FuenteInbox @default(MANUAL)
+  nombre_articulo  String      @db.Text
+  precio_usd       Decimal     @db.Decimal(10, 2)
+  tracking_number  String?     @unique @db.VarChar(255)
+  vendedor_ebay    String?     @db.VarChar(255)
+  url_ebay         String?     @db.Text
+  raw_email_data   Json?
+  estado           EstadoInbox @default(pendiente_triage)
+  descartado_razon String?     @db.Text
+  triaged_at       DateTime?   @db.Timestamptz
+  triaged_by       String?     @db.Uuid
+  created_at       DateTime    @default(now()) @db.Timestamptz
+
+  usuario_triage usuarios? @relation(fields: [triaged_by], references: [id])
+  equipos        equipos[]
+}
+
+model inversores {
+  id                  String  @id @default(uuid()) @db.Uuid
+  nombre              String  @db.VarChar(255)
+  porcentaje_ganancia Decimal @db.Decimal(5, 2)
+  telefono            String? @db.VarChar(50)
+  notas               String? @db.Text
+  activo              Boolean @default(true)
+  created_at          DateTime @default(now()) @db.Timestamptz
+
+  equipos            equipos[]
+  perdidas_capital   perdidas_capital[]
+  reintegros_capital reintegros_capital[]
+  lotes_accesorios   lotes_accesorios[]
+  reportes_generados reportes_generados[]
+}
+
+model equipos {
+  id                          String            @id @default(uuid()) @db.Uuid
+  numero_serie                String            @unique @db.VarChar(100)
+  inbox_id                    String?           @db.Uuid
+  inversor_id                 String            @db.Uuid
+  marca                       String            @db.VarChar(100)
+  modelo                      String            @db.VarChar(100)
+  tipo                        TipoEquipo        @default(laptop)
+  condicion                   CondicionEquipo   @default(SEMINUEVO)
+  procesador                  String?           @db.VarChar(100)
+  ram_gb                      Int?
+  almacenamiento_gb           Int?
+  tipo_almacenamiento         String?           @db.VarChar(50)
+  bateria_ciclos              Int?
+  bateria_salud_pct           Int?
+  estado                      EstadoEquipo      @default(COMPRADO)
+  costo_base_usd              Decimal           @db.Decimal(10, 2)
+  peso_real_libras            Decimal?          @db.Decimal(6, 2)
+  tipo_envio                  TipoEnvio?        @default(aereo)
+  costo_logistico_usd         Decimal?          @db.Decimal(10, 2)
+  costo_acondicionamiento_usd Decimal           @default(0) @db.Decimal(10, 2)
+  reembolso_parcial_usd       Decimal           @default(0) @db.Decimal(10, 2)
+  ctr_usd                     Decimal           @db.Decimal(10, 2)
+  precio_venta_sugerido_usd   Decimal           @db.Decimal(10, 2)
+  precio_venta_usd            Decimal?          @db.Decimal(10, 2)
+  estado_incidencia           EstadoIncidencia?
+  plataforma_disputa          PlataformaDisputa?
+  notas_resolucion            String?           @db.Text
+  foto_urls                   String[]          @default([])
+  visible_en_inventario       Boolean           @default(true)
+  requiere_cargador           Boolean           @default(true)
+  costo_accesorios_usd        Decimal           @default(0) @db.Decimal(10, 2)
+  origen                      OrigenDato        @default(SISTEMA)
+  deleted_at                  DateTime?         @db.Timestamptz
+  created_at                  DateTime          @default(now()) @db.Timestamptz
+  updated_at                  DateTime          @updatedAt @db.Timestamptz
+
+  inbox                compras_pendientes?   @relation(fields: [inbox_id], references: [id])
+  inversor             inversores            @relation(fields: [inversor_id], references: [id])
+  ventas               ventas?
+  historial_estados    historial_estados[]
+  accesorios_asignados accesorios_inventario[]
+  perdidas_capital     perdidas_capital[]
+}
+
+model clientes {
+  id             String      @id @default(uuid()) @db.Uuid
+  nombre         String      @db.VarChar(255)
+  telefono       String      @db.VarChar(50)
+  whatsapp       String?     @db.VarChar(50)
+  cedula         String?     @db.VarChar(50)
+  email          String?     @db.VarChar(255)
+  tipo_cliente   TipoCliente @default(PERSONA_NATURAL)
+  nombre_empresa String?     @db.VarChar(255)
+  notas          String?     @db.Text
+  created_at     DateTime    @default(now()) @db.Timestamptz
+
+  ventas             ventas[]
+  ordenes_reparacion ordenes_reparacion[]
+  ventas_accesorios  ventas_accesorios[]
+}
+
+model ventas {
+  id                           String     @id @default(uuid()) @db.Uuid
+  numero_factura               String     @unique @db.VarChar(100)
+  numero_garantia              String     @unique @db.VarChar(100)
+  equipo_id                    String     @unique @db.Uuid
+  cliente_id                   String     @db.Uuid
+  precio_venta_usd             Decimal    @db.Decimal(10, 2)
+  moneda_cobro                 Moneda     @default(USD)
+  monto_cobrado_nio            Decimal?   @db.Decimal(12, 2)
+  monto_cobrado_usd_parte      Decimal?   @db.Decimal(10, 2)
+  tasa_cambio_aplicada         Decimal    @db.Decimal(8, 4)
+  ctr_al_momento_usd           Decimal    @db.Decimal(10, 2)
+  ganancia_bruta_venta_usd     Decimal    @db.Decimal(10, 2)
+  porcentaje_inversor_aplicado Decimal    @db.Decimal(5, 2)
+  ganancia_bruta_inversor_est  Decimal    @db.Decimal(10, 2)
+  ganancia_bruta_zeltek_est    Decimal    @db.Decimal(10, 2)
+  capital_retorno_inversor_usd Decimal    @db.Decimal(10, 2)
+  reparto_liquidado            Boolean    @default(false)
+  fecha_liquidacion            DateTime?  @db.Timestamptz
+  metodo_pago                  MetodoPago
+  referencia_pago              String?    @db.VarChar(255)
+  dias_garantia                Int
+  garantia_vence               DateTime   @db.Date
+  evidencia_entrega_url        String     @db.Text
+  justificacion_precio         String?    @db.Text
+  pf_tap_ganancia_aplicado     Decimal    @db.Decimal(5, 2)
+  pf_tap_garantias_aplicado    Decimal    @db.Decimal(5, 2)
+  pf_tap_opex_aplicado         Decimal    @db.Decimal(5, 2)
+  pf_tap_reparto_aplicado      Decimal    @db.Decimal(5, 2)
+  pf_monto_ganancia_usd        Decimal    @db.Decimal(10, 2)
+  pf_monto_garantias_usd       Decimal    @db.Decimal(10, 2)
+  pf_monto_opex_usd            Decimal    @db.Decimal(10, 2)
+  pf_monto_reparto_usd         Decimal    @db.Decimal(10, 2)
+  vendedor_id                  String     @db.Uuid
+  fecha_venta                  DateTime   @default(now()) @db.Timestamptz
+
+  equipo                      equipos              @relation(fields: [equipo_id], references: [id])
+  cliente                     clientes             @relation(fields: [cliente_id], references: [id])
+  vendedor                    usuarios             @relation(fields: [vendedor_id], references: [id])
+  ordenes_reparacion_garantia ordenes_reparacion[]
+}
+
+model ordenes_reparacion {
+  id                   String           @id @default(uuid()) @db.Uuid
+  numero_orden         String           @unique @db.VarChar(100)
+  cliente_id           String           @db.Uuid
+  tipo                 TipoReparacion   @default(externa)
+  venta_id             String?          @db.Uuid
+  equipo_descripcion   String           @db.Text
+  numero_serie_externo String?          @db.VarChar(100)
+  falla_reportada      String           @db.Text
+  diagnostico_tecnico  String?          @db.Text
+  estado               EstadoReparacion @default(RECIBIDO)
+  presupuesto_usd      Decimal?         @db.Decimal(10, 2)
+  aprobado_cliente     Boolean?
+  costo_repuestos_usd  Decimal          @default(0) @db.Decimal(10, 2)
+  costo_mano_obra_usd  Decimal          @default(0) @db.Decimal(10, 2)
+  costo_total_usd      Decimal          @db.Decimal(10, 2)
+  precio_cobrado_usd   Decimal?         @db.Decimal(10, 2)
+  metodo_pago          MetodoPago?
+  moneda_cobro         Moneda?
+  tasa_cambio_aplicada Decimal?         @db.Decimal(8, 4)
+  tecnico_id           String?          @db.Uuid
+  fecha_recepcion      DateTime         @default(now()) @db.Timestamptz
+  fecha_diagnostico    DateTime?        @db.Timestamptz
+  fecha_entrega        DateTime?        @db.Timestamptz
+  notas                String?          @db.Text
+  created_at           DateTime         @default(now()) @db.Timestamptz
+  updated_at           DateTime         @updatedAt @db.Timestamptz
+
+  cliente        clientes  @relation(fields: [cliente_id], references: [id])
+  venta_original ventas?   @relation(fields: [venta_id], references: [id])
+  tecnico        usuarios? @relation(fields: [tecnico_id], references: [id])
+}
+
+model gastos_operativos {
+  id                   String         @id @default(uuid()) @db.Uuid
+  concepto             String         @db.VarChar(255)
+  moneda_original      Moneda         @default(USD)
+  monto_original       Decimal        @db.Decimal(12, 2)
+  tasa_cambio_aplicada Decimal?       @db.Decimal(8, 4)
+  monto_usd            Decimal        @db.Decimal(10, 2)
+  fecha                DateTime       @db.Date
+  categoria            CategoriaGasto @default(OTRO)
+  comprobante_url      String?        @db.Text
+  recurrente           Boolean        @default(false)
+  notas                String?        @db.Text
+  registrado_por       String         @db.Uuid
+  created_at           DateTime       @default(now()) @db.Timestamptz
+
+  usuario usuarios @relation(fields: [registrado_por], references: [id])
+}
+
+model perdidas_capital {
+  id                    String        @id @default(uuid()) @db.Uuid
+  inversor_id           String        @db.Uuid
+  equipo_id             String?       @db.Uuid
+  motivo                MotivoPerdida
+  descripcion           String        @db.Text
+  monto_perdido_usd     Decimal       @db.Decimal(10, 2)
+  monto_reintegrado_usd Decimal       @default(0) @db.Decimal(10, 2)
+  estado                EstadoPerdida @default(PENDIENTE)
+  fecha_perdida         DateTime      @db.Date
+  fecha_recuperacion    DateTime?     @db.Date
+  registrado_por        String        @db.Uuid
+  created_at            DateTime      @default(now()) @db.Timestamptz
+
+  inversor    inversores           @relation(fields: [inversor_id], references: [id])
+  equipo      equipos?             @relation(fields: [equipo_id], references: [id])
+  usuario     usuarios             @relation(fields: [registrado_por], references: [id])
+  reintegros  reintegros_capital[]
+}
+
+model reintegros_capital {
+  id             String   @id @default(uuid()) @db.Uuid
+  perdida_id     String   @db.Uuid
+  inversor_id    String   @db.Uuid
+  monto_usd      Decimal  @db.Decimal(10, 2)
+  mes_aplicado   DateTime @db.Date
+  notas          String?  @db.Text
+  registrado_por String   @db.Uuid
+  created_at     DateTime @default(now()) @db.Timestamptz
+
+  perdida  perdidas_capital @relation(fields: [perdida_id], references: [id])
+  inversor inversores       @relation(fields: [inversor_id], references: [id])
+  usuario  usuarios         @relation(fields: [registrado_por], references: [id])
+}
+
+model usuarios {
+  id                String     @id @default(uuid()) @db.Uuid
+  nombre            String     @db.VarChar(255)
+  email             String     @unique @db.VarChar(255)
+  password_hash     String     @db.VarChar(255)
+  rol               RolUsuario @default(VENDEDOR)
+  activo            Boolean    @default(true)
+  intentos_fallidos Int        @default(0)
+  bloqueado_hasta   DateTime?  @db.Timestamptz
+  ultimo_login      DateTime?  @db.Timestamptz
+  ultimo_login_ip   String?    @db.VarChar(45)
+  created_at        DateTime   @default(now()) @db.Timestamptz
+  updated_at        DateTime   @updatedAt @db.Timestamptz
+
+  compras_triage         compras_pendientes[]
+  ventas_registradas     ventas[]
+  ordenes_reparacion     ordenes_reparacion[]
+  gastos_registrados     gastos_operativos[]
+  perdidas_registradas   perdidas_capital[]
+  reintegros_registrados reintegros_capital[]
+  ventas_accesorios      ventas_accesorios[]
+  sesiones               sesiones[]
+  historial_estados      historial_estados[]
+  reportes_generados     reportes_generados[]
+}
+
+model sesiones {
+  id                 String   @id @default(uuid()) @db.Uuid
+  usuario_id         String   @db.Uuid
+  refresh_token_hash String   @db.VarChar(255)
+  user_agent         String?  @db.Text
+  ip_address         String?  @db.VarChar(45)
+  expires_at         DateTime @db.Timestamptz
+  ultima_actividad   DateTime @default(now()) @db.Timestamptz
+  created_at         DateTime @default(now()) @db.Timestamptz
+
+  usuario usuarios @relation(fields: [usuario_id], references: [id], onDelete: Cascade)
+}
+
+model login_intentos {
+  id              String   @id @default(uuid()) @db.Uuid
+  email_intentado String   @db.VarChar(255)
+  ip_address      String?  @db.VarChar(45)
+  exitoso         Boolean
+  user_agent      String?  @db.Text
+  created_at      DateTime @default(now()) @db.Timestamptz
+}
+
+model historial_estados {
+  id              String       @id @default(uuid()) @db.Uuid
+  equipo_id       String       @db.Uuid
+  estado_anterior EstadoEquipo
+  estado_nuevo    EstadoEquipo
+  notas           String?      @db.Text
+  usuario_id      String       @db.Uuid
+  created_at      DateTime     @default(now()) @db.Timestamptz
+
+  equipo  equipos  @relation(fields: [equipo_id], references: [id])
+  usuario usuarios @relation(fields: [usuario_id], references: [id])
+}
+
+model audit_logs {
+  id               String   @id @default(uuid()) @db.Uuid
+  usuario_id       String?  @db.Uuid
+  accion           String   @db.VarChar(100)
+  tabla_afectada   String   @db.VarChar(100)
+  registro_id      String   @db.Uuid
+  campo_modificado String?  @db.VarChar(100)
+  valor_anterior   Json?
+  valor_nuevo      Json?
+  ip_address       String?  @db.VarChar(45)
+  user_agent       String?  @db.Text
+  notas            String?  @db.Text
+  created_at       DateTime @default(now()) @db.Timestamptz
+}
+
+model reportes_generados {
+  id               String           @id @default(uuid()) @db.Uuid
+  numero_documento String           @unique @db.VarChar(100)
+  tipo             TipoReporte
+  inversor_id      String?          @db.Uuid
+  periodo_desde    DateTime         @db.Date
+  periodo_hasta    DateTime         @db.Date
+  generado_por     GeneradorReporte @default(USUARIO)
+  usuario_id       String?          @db.Uuid
+  enviado_email    Boolean          @default(false)
+  enviado_whatsapp Boolean          @default(false)
+  created_at       DateTime         @default(now()) @db.Timestamptz
+
+  inversor inversores? @relation(fields: [inversor_id], references: [id])
+  usuario  usuarios?   @relation(fields: [usuario_id], references: [id])
+}
+
+model categorias_accesorio {
+  id                         String   @id @default(uuid()) @db.Uuid
+  nombre                     String   @unique @db.VarChar(100)
+  descripcion                String?  @db.Text
+  requiere_asignacion_equipo Boolean  @default(false)
+  created_at                 DateTime @default(now()) @db.Timestamptz
+
+  lotes      lotes_accesorios[]
+  inventarios accesorios_inventario[]
+}
+
+model lotes_accesorios {
+  id                  String   @id @default(uuid()) @db.Uuid
+  numero_lote         String   @unique @db.VarChar(100)
+  categoria_id        String   @db.Uuid
+  descripcion         String   @db.Text
+  cantidad_total      Int
+  precio_lote_usd     Decimal  @db.Decimal(10, 2)
+  flete_lote_usd      Decimal  @default(0) @db.Decimal(10, 2)
+  costo_unitario_real Decimal  @db.Decimal(10, 2)
+  proveedor           String   @db.VarChar(255)
+  url_compra          String?  @db.Text
+  inversor_id         String   @db.Uuid
+  fecha_compra        DateTime @db.Date
+  notas               String?  @db.Text
+  created_at          DateTime @default(now()) @db.Timestamptz
+
+  categoria   categorias_accesorio    @relation(fields: [categoria_id], references: [id])
+  inversor    inversores              @relation(fields: [inversor_id], references: [id])
+  inventarios accesorios_inventario[]
+}
+
+model accesorios_inventario {
+  id                 String                   @id @default(uuid()) @db.Uuid
+  lote_id            String                   @db.Uuid
+  categoria_id       String                   @db.Uuid
+  costo_unitario_usd Decimal                  @db.Decimal(10, 2)
+  estado             EstadoAccesorio          @default(disponible)
+  tipo_asignacion    TipoAsignacionAccesorio?
+  equipo_asignado_id String?                  @db.Uuid
+  venta_accesorio_id String?                  @db.Uuid
+  notas              String?                  @db.Text
+  created_at         DateTime                 @default(now()) @db.Timestamptz
+  updated_at         DateTime                 @updatedAt @db.Timestamptz
+
+  lote            lotes_accesorios   @relation(fields: [lote_id], references: [id], onDelete: Cascade)
+  categoria       categorias_accesorio @relation(fields: [categoria_id], references: [id])
+  equipo_asignado equipos?           @relation(fields: [equipo_asignado_id], references: [id])
+  venta_accesorio ventas_accesorios? @relation(fields: [venta_accesorio_id], references: [id])
+}
+
+model ventas_accesorios {
+  id                   String     @id @default(uuid()) @db.Uuid
+  numero_factura       String     @unique @db.VarChar(100)
+  cliente_id           String?    @db.Uuid
+  precio_venta_usd     Decimal    @db.Decimal(10, 2)
+  monto_cobrado_nio    Decimal?   @db.Decimal(12, 2)
+  tasa_cambio_aplicada Decimal    @db.Decimal(8, 4)
+  moneda_cobro         Moneda     @default(USD)
+  metodo_pago          MetodoPago
+  vendedor_id          String     @db.Uuid
+  fecha_venta          DateTime   @default(now()) @db.Timestamptz
+
+  cliente    clientes?               @relation(fields: [cliente_id], references: [id])
+  vendedor   usuarios                @relation(fields: [vendedor_id], references: [id])
+  accesorios accesorios_inventario[]
+}
+
+model catalogo_productos {
+  id                        String     @id @default(uuid()) @db.Uuid
+  nombre                    String     @db.VarChar(255)
+  marca                     String     @db.VarChar(100)
+  tipo                      TipoEquipo @default(laptop)
+  categoria                 String?    @db.VarChar(100)
+  especificaciones_default  Json?
+  precio_venta_sugerido_usd Decimal?   @db.Decimal(10, 2)
+  activo                    Boolean    @default(true)
+  notas                     String?    @db.Text
+  created_at                DateTime   @default(now()) @db.Timestamptz
+}
+
+model settings {
+  clave       String   @id @db.VarChar(100)
+  valor       String   @db.Text
+  tipo        String   @db.VarChar(50)
+  descripcion String   @db.Text
+  created_at  DateTime @default(now()) @db.Timestamptz
+  updated_at  DateTime @updatedAt @db.Timestamptz
+}
+
+model fondos_financieros {
+  id         String   @id @default(uuid()) @db.Uuid
+  nombre     String   @unique @db.VarChar(100)
+  saldo_usd  Decimal  @default(0) @db.Decimal(10, 2)
+  created_at DateTime @default(now()) @db.Timestamptz
+  updated_at DateTime @updatedAt @db.Timestamptz
+
+  historial historial_fondos[]
+}
+
+model historial_fondos {
+  id         String   @id @default(uuid()) @db.Uuid
+  fondo_id   String   @db.Uuid
+  monto_usd  Decimal  @db.Decimal(10, 2)
+  tipo       String   @db.VarChar(10)
+  concepto   String   @db.VarChar(255)
+  created_at DateTime @default(now()) @db.Timestamptz
+
+  fondo fondos_financieros @relation(fields: [fondo_id], references: [id], onDelete: Cascade)
+}

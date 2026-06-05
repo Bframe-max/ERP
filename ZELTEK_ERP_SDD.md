@@ -604,6 +604,14 @@ INSERT en audit_logs y operación principal son **atómicos** — si uno falla, 
 - Cloudinary organizado: `zeltek/equipos/:id/`, `zeltek/ventas/:id/`, `zeltek/gastos/:id/`.
 - Fotos nunca se eliminan — son evidencia histórica.
 
+### 9.5 Progressive Web App (PWA)
+
+Para permitir el uso nativo del ERP en dispositivos móviles (iOS/Android) durante operaciones de bodega y ventas:
+- El frontend se compilará como una PWA utilizando `vite-plugin-pwa`.
+- Permitirá instalación directa desde Safari (iOS) o Chrome (Android) mediante la opción "Añadir a la pantalla de inicio".
+- Se configurará un `manifest.json` con los íconos de Zeltek ERP, theme color oscuro (alineado con la UI) y `display: standalone` para ocultar la barra del navegador.
+- Habilitará una capa de caché básica con service workers para acelerar tiempos de carga y soportar fluctuaciones de red breves.
+
 ---
 
 ## 10. PILAR 10 — ACCESORIOS, LOTES Y ASIGNACIÓN

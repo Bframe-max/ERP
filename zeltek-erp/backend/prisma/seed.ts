@@ -59,7 +59,7 @@ async function main() {
         id: 'b2c90ef8-723c-497a-cc9f-9d34f4b0e933',
         nombre: 'Administrador',
         email: 'admin@zeltek.nic',
-        password_hash: '$2a$12$R9h/cIPzVE8.27u1zQ5yOOMW3/G9pD1Q/WvXUv4pXh/lBvC3iJzKm',
+        password_hash: '$2a$12$ASU9lmXGfkeQNIZ2ETf7ZuDCbuArR7.1MszVnAY44i9pzkyrgMYha',
         rol: 'ADMIN',
         activo: true,
         intentos_fallidos: 0,

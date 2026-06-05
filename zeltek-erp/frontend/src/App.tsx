@@ -10,6 +10,8 @@ import { ReparacionesPage } from './features/reparaciones/ReparacionesPage';
 import { ReportesPage } from './features/reportes/ReportesPage';
 import { GastosPage } from './features/gastos/GastosPage';
 import { InversoresPage } from './features/inversores/InversoresPage';
+import { UsuariosPage } from './features/usuarios/UsuariosPage';
+import { ConfiguracionPage } from './features/configuracion/ConfiguracionPage';
 import { useAuthStore } from './stores/authStore';
 
 function PlaceholderPage({ titulo }: { titulo: string }) {
@@ -54,8 +56,8 @@ export default function App() {
           <Route path="gastos" element={<GastosPage />} />
           <Route path="garantias" element={<ReparacionesPage tipo="garantia" />} />
           <Route path="inversores" element={<InversoresPage />} />
-          <Route path="usuarios" element={<PlaceholderPage titulo="Usuarios" />} />
-          <Route path="configuracion" element={<PlaceholderPage titulo="Configuración" />} />
+          <Route path="usuarios" element={<UsuariosPage />} />
+          <Route path="configuracion" element={<ConfiguracionPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

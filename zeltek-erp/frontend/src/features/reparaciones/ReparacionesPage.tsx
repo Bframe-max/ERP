@@ -4,6 +4,11 @@ import { reparacionesService, Reparacion, CrearReparacionDTO } from './reparacio
 import { Modal } from '@/components/Modal';
 import api from '@/lib/api';
 
+function fmtFecha(iso: string | null | undefined) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('es-NI', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
 // ─── Modal Crear Reparación/Garantía ─────────────────────────────────────────
 
 function ReparacionForm({ 

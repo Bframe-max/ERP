@@ -301,12 +301,17 @@ export async function listarVentas(params: {
   page?: number;
   limit?: number;
   vendedor_id?: string;
+  garantias_vigentes?: boolean;
 }) {
   const page = params.page ?? 1;
   const limit = params.limit ?? 20;
   const skip = (page - 1) * limit;
 
-  const where = params.vendedor_id ? { vendedor_id: params.vendedor_id } : {};
+  const where: any = {};
+  if (params.vendedor_id) where.vendedor_id = params.vendedor_id;
+  if (params.garantias_vigentes) {
+    where.garantia_vence = { gte: new Date() };
+  }
 
   const [items, total] = await prisma.$transaction([
     prisma.ventas.findMany({

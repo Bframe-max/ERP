@@ -1021,7 +1021,7 @@ Banner de tasa de cambio: si `tasa_cambio_fecha` tiene > 1 día → banner amari
 🛒 Compras / Lotes     → /compras         [lotes accesorios + historial inbox]
 📊 Reportes            → /reportes        [P&L, estado cuenta inversor]
 🧾 Gastos              → /gastos          [OPEX]
-🛡️ Garantías           → /garantias       [reclamos activos]
+🛡️ Garantías           → /garantias       [Pólizas vigentes y reclamos activos]
 📈 Inversores          → /inversores
 
 ─── SISTEMA ─────────────────

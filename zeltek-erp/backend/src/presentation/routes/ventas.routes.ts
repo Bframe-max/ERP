@@ -41,6 +41,7 @@ router.get('/', verificaAuth, async (req: Request, res: Response) => {
     page: z.coerce.number().positive().default(1),
     limit: z.coerce.number().positive().max(100).default(20),
     vendedor_id: z.string().uuid().optional(),
+    garantias_vigentes: z.preprocess((val) => val === 'true', z.boolean()).optional(),
   }).parse(req.query);
   try {
     const resultado = await ventaService.listarVentas(params);

@@ -14,16 +14,6 @@ import { UsuariosPage } from './features/usuarios/UsuariosPage';
 import { ConfiguracionPage } from './features/configuracion/ConfiguracionPage';
 import { useAuthStore } from './stores/authStore';
 
-function PlaceholderPage({ titulo }: { titulo: string }) {
-  return (
-    <div className="flex items-center justify-center h-full">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold text-slate-100">{titulo}</h1>
-        <p className="text-slate-400 mt-2">Módulo en desarrollo</p>
-      </div>
-    </div>
-  );
-}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { usuario } = useAuthStore();
@@ -46,7 +36,7 @@ export default function App() {
         >
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />
-          <Route path="inbox" element={<PlaceholderPage titulo="Bandeja de Entrada" />} />
+          <Route path="inbox" element={<Navigate to="/compras" replace />} />
           <Route path="inventario" element={<InventarioPage />} />
           <Route path="reparaciones" element={<ReparacionesPage tipo="externa" />} />
           <Route path="ventas" element={<VentasPage />} />

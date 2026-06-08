@@ -1,6 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard, Inbox, Monitor, Wrench, ShoppingCart,
+  LayoutDashboard, Monitor, Wrench, ShoppingCart,
   Package, ShoppingBag, BarChart3, Receipt, ShieldAlert,
   TrendingUp, UserCog, Settings2, LogOut,
 } from 'lucide-react';
@@ -45,7 +45,6 @@ export function Sidebar() {
 
   const navPrincipal: NavItem[] = [
     { href: '/dashboard', icon: <LayoutDashboard size={18} />, label: 'Dashboard' },
-    { href: '/inbox', icon: <Inbox size={18} />, label: 'Inbox', badge: pendientesInbox },
     { href: '/inventario', icon: <Monitor size={18} />, label: 'Inventario' },
     { href: '/reparaciones', icon: <Wrench size={18} />, label: 'Reparaciones' },
     { href: '/ventas', icon: <ShoppingCart size={18} />, label: 'Ventas' },
@@ -53,7 +52,7 @@ export function Sidebar() {
 
   const navAdmin: NavItem[] = [
     { href: '/productos', icon: <Package size={18} />, label: 'Productos' },
-    { href: '/compras', icon: <ShoppingBag size={18} />, label: 'Compras / Lotes' },
+    { href: '/compras', icon: <ShoppingBag size={18} />, label: 'Compras', badge: pendientesInbox },
     { href: '/reportes', icon: <BarChart3 size={18} />, label: 'Reportes' },
     { href: '/gastos', icon: <Receipt size={18} />, label: 'Gastos' },
     { href: '/garantias', icon: <ShieldAlert size={18} />, label: 'Garantías' },

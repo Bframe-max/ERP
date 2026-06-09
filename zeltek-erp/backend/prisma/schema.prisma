@@ -21,6 +21,15 @@ enum EstadoInbox {
   descartado
 }
 
+enum EstadoCompra {
+  pendiente              // Comprado, viajando hacia la bodega de Miami
+  en_miami               // La agencia confirmó recepción en bodega Miami
+  en_transito_nicaragua  // En camino a Nicaragua, con tracking interno de la agencia
+  recibido               // Llegó a Nicaragua — compra completada, lista para triage
+  ingresado              // Triage completado — pasó a inventario
+  descartado             // Cancelada / devuelta / rechazada
+}
+
 enum TipoEquipo {
   laptop
   telefono
@@ -156,17 +165,29 @@ model compras_pendientes {
   fuente           FuenteInbox @default(MANUAL)
   nombre_articulo  String      @db.Text
   precio_usd       Decimal     @db.Decimal(10, 2)
+  costo_envio_usd  Decimal?    @db.Decimal(10, 2)
+  cantidad         Int         @default(1)
+  fecha_compra     DateTime?   @db.Timestamptz
+  producto_id      String?     @db.Uuid
   tracking_number  String?     @unique @db.VarChar(255)
+  tracking_interno String?     @db.VarChar(255)
+  peso_real_libras    Decimal?  @db.Decimal(6, 2)
+  tipo_envio          TipoEnvio? @default(aereo)
+  costo_logistico_usd Decimal?  @db.Decimal(10, 2)
   vendedor_ebay    String?     @db.VarChar(255)
   url_ebay         String?     @db.Text
   raw_email_data   Json?
-  estado           EstadoInbox @default(pendiente_triage)
+  estado           EstadoCompra @default(pendiente)
   descartado_razon String?     @db.Text
+  en_miami_at         DateTime? @db.Timestamptz
+  en_transito_at      DateTime? @db.Timestamptz
+  recibido_at         DateTime? @db.Timestamptz
   triaged_at       DateTime?   @db.Timestamptz
   triaged_by       String?     @db.Uuid
   created_at       DateTime    @default(now()) @db.Timestamptz
 
-  usuario_triage usuarios? @relation(fields: [triaged_by], references: [id])
+  usuario_triage usuarios?          @relation(fields: [triaged_by], references: [id])
+  producto       catalogo_productos? @relation(fields: [producto_id], references: [id])
   equipos        equipos[]
 }
 
@@ -213,8 +234,8 @@ model equipos {
   precio_venta_usd            Decimal?          @db.Decimal(10, 2)
   estado_incidencia           EstadoIncidencia?
   plataforma_disputa          PlataformaDisputa?
+  notas                       String?           @db.Text
   notas_resolucion            String?           @db.Text
-  foto_urls                   String[]          @default([])
   visible_en_inventario       Boolean           @default(true)
   requiere_cargador           Boolean           @default(true)
   costo_accesorios_usd        Decimal           @default(0) @db.Decimal(10, 2)
@@ -548,6 +569,8 @@ model catalogo_productos {
   activo                    Boolean    @default(true)
   notas                     String?    @db.Text
   created_at                DateTime   @default(now()) @db.Timestamptz
+
+  compras_pendientes compras_pendientes[]
 }
 
 model settings {

@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Plus, RefreshCw, ChevronRight, TrendingUp, Wallet, Package, AlertCircle } from 'lucide-react';
 import api from '@/lib/api';
 import { Modal } from '@/components/Modal';
+import { TIMEZONE_NI } from '@/lib/utils';
 
 interface Inversor {
   id: string;
@@ -51,7 +52,7 @@ function fmt(n: number | string | null | undefined) {
 }
 
 function fmtFecha(iso: string) {
-  return new Date(iso).toLocaleDateString('es-NI', { day: '2-digit', month: 'short', year: 'numeric' });
+  return new Date(iso).toLocaleDateString('es-NI', { day: '2-digit', month: 'short', year: 'numeric', timeZone: TIMEZONE_NI });
 }
 
 const ESTADO_COLORS: Record<string, string> = {

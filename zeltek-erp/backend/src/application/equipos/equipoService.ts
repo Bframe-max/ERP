@@ -33,17 +33,23 @@ export const cambiarEstadoSchema = z.object({
     'EN_TALLER', 'DISPONIBLE', 'VENDIDO', 'EN_RECLAMO', 'DEVUELTO',
   ]),
   notas: z.string().optional().nullable(),
+  // Para EN_TALLER → DISPONIBLE (RN-STATE-001)
+  peso_real_libras: z.number().positive().optional(),
   // Para EN_RECLAMO
   estado_incidencia: z.enum(['DISPUTA_ABIERTA', 'RESUELTO']).optional().nullable(),
   plataforma_disputa: z.enum(['PAYPAL', 'EBAY', 'OTRO']).optional().nullable(),
   notas_resolucion: z.string().optional().nullable(),
 });
 
+const ESTADO_EQUIPO_VALUES = [
+  'COMPRADO', 'EN_BODEGA_MIAMI', 'EN_TRANSITO',
+  'EN_TALLER', 'DISPONIBLE', 'VENDIDO', 'EN_RECLAMO', 'DEVUELTO',
+] as const;
+
 export const filtrosEquipoSchema = z.object({
-  estado: z.enum([
-    'COMPRADO', 'EN_BODEGA_MIAMI', 'EN_TRANSITO',
-    'EN_TALLER', 'DISPONIBLE', 'VENDIDO', 'EN_RECLAMO', 'DEVUELTO',
-  ]).optional(),
+  estado: z.enum(ESTADO_EQUIPO_VALUES).optional(),
+  // lista de estados separados por coma — para vistas agrupadas (ej. "en tránsito" = varios estados)
+  estados: z.string().optional(),
   inversor_id: z.string().uuid().optional(),
   marca: z.string().optional(),
   tipo: z.enum(['laptop', 'telefono', 'tablet', 'otro']).optional(),
@@ -76,12 +82,19 @@ function toNumber(d: Decimal | null | undefined): number {
 // ─── Listar ───────────────────────────────────────────────────────────────────
 
 export async function listarEquipos(filtros: z.infer<typeof filtrosEquipoSchema>) {
-  const { estado, inversor_id, marca, tipo, page, limit } = filtros;
+  const { estado, estados, inversor_id, marca, tipo, page, limit } = filtros;
   const skip = (page - 1) * limit;
+
+  const listaEstados = estados
+    ?.split(',')
+    .map(s => s.trim())
+    .filter((s): s is typeof ESTADO_EQUIPO_VALUES[number] => (ESTADO_EQUIPO_VALUES as readonly string[]).includes(s));
+
+  const filtroEstado = listaEstados?.length ? { in: listaEstados } : estado;
 
   const where = {
     deleted_at: null,
-    ...(estado && { estado }),
+    ...(filtroEstado && { estado: filtroEstado }),
     ...(inversor_id && { inversor_id }),
     ...(marca && { marca: { contains: marca, mode: 'insensitive' as const } }),
     ...(tipo && { tipo }),
@@ -94,6 +107,13 @@ export async function listarEquipos(filtros: z.infer<typeof filtrosEquipoSchema>
         inversor: { select: { id: true, nombre: true } },
         inbox: { select: { nombre_articulo: true, fuente: true } },
         _count: { select: { accesorios_asignados: true } },
+        // Última transición de estado — alimenta vistas como "En Reparación"
+        // (problema reportado = notas, fecha ingreso = created_at del cambio a EN_TALLER)
+        historial_estados: {
+          orderBy: { created_at: 'desc' },
+          take: 1,
+          select: { estado_nuevo: true, notas: true, created_at: true },
+        },
       },
       orderBy: { created_at: 'desc' },
       skip,
@@ -105,6 +125,37 @@ export async function listarEquipos(filtros: z.infer<typeof filtrosEquipoSchema>
   return {
     items,
     meta: { total, page, limit, pages: Math.ceil(total / limit) },
+  };
+}
+
+// ─── Resumen de inventario ────────────────────────────────────────────────────
+// "En inventario" = lo que ya está listo para vender (DISPONIBLE). Los equipos
+// en preparación (Comprado/Bodega Miami/Tránsito/Taller) se gestionan y cuentan
+// dentro del módulo de Compras, no aquí.
+
+export async function obtenerResumenInventario() {
+  const [equiposAgg, accesoriosAgg] = await Promise.all([
+    prisma.equipos.aggregate({
+      where: { deleted_at: null, estado: 'DISPONIBLE' },
+      _count: { id: true },
+      _sum: { ctr_usd: true },
+    }),
+    prisma.accesorios_inventario.aggregate({
+      where: { estado: 'disponible' },
+      _count: { id: true },
+      _sum: { costo_unitario_usd: true },
+    }),
+  ]);
+
+  const equiposValor = toNumber(equiposAgg._sum?.ctr_usd ?? null);
+  const accesoriosValor = toNumber(accesoriosAgg._sum?.costo_unitario_usd ?? null);
+
+  return {
+    equipos_count: equiposAgg._count?.id ?? 0,
+    equipos_valor_usd: equiposValor,
+    accesorios_count: accesoriosAgg._count?.id ?? 0,
+    accesorios_valor_usd: accesoriosValor,
+    valor_total_usd: equiposValor + accesoriosValor,
   };
 }
 
@@ -249,10 +300,11 @@ export async function cambiarEstado(
     EquipoStateMachine.validarTransicion(estadoActual, estadoNuevo);
 
     // RN-STATE-001: validaciones adicionales para EN_TALLER → DISPONIBLE
+    // Permite enviar el peso junto con el cambio de estado (no solo el ya guardado)
+    const pesoFinal = datos.peso_real_libras ?? (toNumber(equipo.peso_real_libras) || null);
     if (estadoActual === 'EN_TALLER' && estadoNuevo === 'DISPONIBLE') {
       EquipoStateMachine.validarDisponible({
-        peso_real_libras: toNumber(equipo.peso_real_libras) || null,
-        foto_urls: equipo.foto_urls,
+        peso_real_libras: pesoFinal,
         requiere_cargador: equipo.requiere_cargador,
         tiene_cargador_asignado: equipo.accesorios_asignados.length > 0,
       });
@@ -269,6 +321,7 @@ export async function cambiarEstado(
       where: { id },
       data: {
         estado: estadoNuevo,
+        ...(datos.peso_real_libras !== undefined && { peso_real_libras: datos.peso_real_libras }),
         ...(datos.estado_incidencia && { estado_incidencia: datos.estado_incidencia }),
         ...(datos.plataforma_disputa && { plataforma_disputa: datos.plataforma_disputa }),
         ...(datos.notas_resolucion !== undefined && { notas_resolucion: datos.notas_resolucion }),

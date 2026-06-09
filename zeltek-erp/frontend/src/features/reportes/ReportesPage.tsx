@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { RefreshCw, FileText, TrendingUp, User, Archive } from 'lucide-react';
-import { reportesService } from './reportesService';
+import { RefreshCw, FileText, TrendingUp, User, Archive, TableProperties } from 'lucide-react';
+import { reportesService, ReporteVentasData, InversorDesglose, VentaDesglose } from './reportesService';
+import { hoyNI, primerDiaMesNI, TIMEZONE_NI } from '@/lib/utils';
 
 // ─── Componente: Reporte de Ventas ──────────────────────────────────────────
 
 function ReporteVentas() {
-  const [desde, setDesde] = useState(new Date(new Date().setDate(1)).toISOString().split('T')[0]);
-  const [hasta, setHasta] = useState(new Date().toISOString().split('T')[0]);
+  const [desde, setDesde] = useState(primerDiaMesNI());
+  const [hasta, setHasta] = useState(hoyNI());
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
@@ -100,8 +101,8 @@ function ReporteVentas() {
 // ─── Componente: Estado de Cuenta Inversor ──────────────────────────────────
 
 function ReporteEstadoCuenta() {
-  const [desde, setDesde] = useState(new Date(new Date().setDate(1)).toISOString().split('T')[0]);
-  const [hasta, setHasta] = useState(new Date().toISOString().split('T')[0]);
+  const [desde, setDesde] = useState(primerDiaMesNI());
+  const [hasta, setHasta] = useState(hoyNI());
   const [inversorId, setInversorId] = useState('');
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -221,8 +222,8 @@ function ReporteEstadoCuenta() {
 // ─── Componente: Reporte OPEX ───────────────────────────────────────────────
 
 function ReporteOpex() {
-  const [desde, setDesde] = useState(new Date(new Date().setDate(1)).toISOString().split('T')[0]);
-  const [hasta, setHasta] = useState(new Date().toISOString().split('T')[0]);
+  const [desde, setDesde] = useState(primerDiaMesNI());
+  const [hasta, setHasta] = useState(hoyNI());
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
@@ -313,10 +314,192 @@ function ReporteOpex() {
   );
 }
 
+// ─── Componente: Desglose por Venta ─────────────────────────────────────────
+
+function ReporteDesglose() {
+  const [desde, setDesde] = useState(primerDiaMesNI());
+  const [hasta, setHasta] = useState(hoyNI());
+  const [data, setData] = useState<ReporteVentasData | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function cargar() {
+    setLoading(true);
+    try {
+      const res = await reportesService.getReporteVentas({ desde, hasta });
+      setData(res);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const fmt = (n: number) => `$${n.toFixed(2)}`;
+  const fmtFecha = (iso: string) =>
+    new Date(iso).toLocaleDateString('es-NI', { day: '2-digit', month: 'short', year: 'numeric', timeZone: TIMEZONE_NI });
+
+  const inversores: InversorDesglose[] = data?.inversores ?? [];
+  const totalPct = inversores.reduce((s, i) => s + i.porcentaje, 0);
+
+  function repartoPorInversor(v: VentaDesglose, inv: InversorDesglose): number {
+    if (totalPct === 0) return 0;
+    return v.pf_monto_reparto_usd * inv.porcentaje / totalPct;
+  }
+
+  const totales = data
+    ? data.ventas.reduce(
+        (acc, v) => {
+          acc.precio += v.precio_venta_usd;
+          acc.ctr += v.ctr_al_momento_usd;
+          acc.ganancia_bruta += v.ganancia_bruta_venta_usd;
+          acc.opex += v.pf_monto_opex_usd;
+          acc.reserva += v.pf_monto_garantias_usd;
+          acc.ganancia_neta += v.pf_monto_ganancia_usd;
+          acc.reparto += v.pf_monto_reparto_usd;
+          return acc;
+        },
+        { precio: 0, ctr: 0, ganancia_bruta: 0, opex: 0, reserva: 0, ganancia_neta: 0, reparto: 0 }
+      )
+    : null;
+
+  const pctLabel = (tap: number) => tap > 0 ? ` (${tap}%)` : '';
+  const firstVenta = data?.ventas[0];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-4 items-end bg-slate-800/30 p-4 rounded-xl border border-app-border">
+        <div>
+          <label className="block text-slate-400 text-xs mb-1">Desde</label>
+          <input type="date" value={desde} onChange={e => setDesde(e.target.value)}
+            className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100" />
+        </div>
+        <div>
+          <label className="block text-slate-400 text-xs mb-1">Hasta</label>
+          <input type="date" value={hasta} onChange={e => setHasta(e.target.value)}
+            className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100" />
+        </div>
+        <button onClick={cargar} disabled={loading}
+          className="px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2">
+          {loading ? <RefreshCw size={16} className="animate-spin" /> : <TableProperties size={16} />}
+          Generar
+        </button>
+      </div>
+
+      {data && data.ventas.length === 0 && (
+        <p className="text-slate-500 text-sm text-center py-8">No hay ventas en este período</p>
+      )}
+
+      {data && data.ventas.length > 0 && (
+        <div className="space-y-3">
+          {/* Summary cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-app-surface p-3 rounded-xl border border-app-border">
+              <p className="text-slate-500 text-xs uppercase font-medium">Ventas</p>
+              <p className="text-xl font-bold text-slate-100 mt-0.5">{data.resumen.cantidad_ventas}</p>
+            </div>
+            <div className="bg-app-surface p-3 rounded-xl border border-app-border">
+              <p className="text-slate-500 text-xs uppercase font-medium">Ganancia Bruta</p>
+              <p className="text-xl font-bold text-success mt-0.5">{fmt(data.resumen.ganancia_bruta_usd)}</p>
+            </div>
+            <div className="bg-app-surface p-3 rounded-xl border border-app-border">
+              <p className="text-slate-500 text-xs uppercase font-medium">Fondo OPEX</p>
+              <p className="text-xl font-bold text-blue-400 mt-0.5">{fmt(data.resumen.pf_opex_usd)}</p>
+            </div>
+            <div className="bg-app-surface p-3 rounded-xl border border-app-border border-l-4 border-l-violet-500">
+              <p className="text-slate-500 text-xs uppercase font-medium">Total Reparto</p>
+              <p className="text-xl font-bold text-violet-400 mt-0.5">{fmt(data.resumen.pf_reparto_usd)}</p>
+            </div>
+          </div>
+
+          {/* Wide table */}
+          <div className="bg-app-surface border border-app-border rounded-xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm whitespace-nowrap">
+                <thead className="bg-slate-800/70">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-slate-400 font-medium text-xs uppercase tracking-wider sticky left-0 bg-slate-800/70 z-10">Fecha</th>
+                    <th className="px-4 py-3 text-left text-slate-400 font-medium text-xs uppercase tracking-wider">Serial</th>
+                    <th className="px-4 py-3 text-right text-slate-400 font-medium text-xs uppercase tracking-wider">Precio Venta</th>
+                    <th className="px-4 py-3 text-right text-slate-400 font-medium text-xs uppercase tracking-wider">Costo Repos.</th>
+                    <th className="px-4 py-3 text-right text-success font-medium text-xs uppercase tracking-wider">Ganancia Bruta</th>
+                    <th className="px-4 py-3 text-right text-blue-400 font-medium text-xs uppercase tracking-wider">
+                      F. Operativo{pctLabel(firstVenta?.pf_tap_opex_aplicado ?? 0)}
+                    </th>
+                    <th className="px-4 py-3 text-right text-amber-400 font-medium text-xs uppercase tracking-wider">
+                      F. Reserva{pctLabel(firstVenta?.pf_tap_garantias_aplicado ?? 0)}
+                    </th>
+                    <th className="px-4 py-3 text-right text-emerald-400 font-medium text-xs uppercase tracking-wider">
+                      G. Neta Real{pctLabel(firstVenta?.pf_tap_ganancia_aplicado ?? 0)}
+                    </th>
+                    {inversores.map(inv => (
+                      <th key={inv.id} className="px-4 py-3 text-right text-violet-400 font-medium text-xs uppercase tracking-wider">
+                        {inv.nombre.split(' ')[0]} ({inv.porcentaje}%)
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-app-border">
+                  {data.ventas.map(v => (
+                    <tr key={v.id} className="hover:bg-slate-800/30 transition-colors">
+                      <td className="px-4 py-3 text-slate-400 text-xs sticky left-0 bg-app-surface hover:bg-slate-800/30">{fmtFecha(v.fecha_venta)}</td>
+                      <td className="px-4 py-3">
+                        <p className="text-slate-100 text-xs font-mono">{v.equipo.numero_serie}</p>
+                        <p className="text-slate-500 text-xs">{v.equipo.marca} {v.equipo.modelo}</p>
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-slate-100">{fmt(v.precio_venta_usd)}</td>
+                      <td className="px-4 py-3 text-right font-mono text-slate-400">{fmt(v.ctr_al_momento_usd)}</td>
+                      <td className="px-4 py-3 text-right font-mono text-success font-semibold">{fmt(v.ganancia_bruta_venta_usd)}</td>
+                      <td className="px-4 py-3 text-right font-mono text-blue-300">{fmt(v.pf_monto_opex_usd)}</td>
+                      <td className="px-4 py-3 text-right font-mono text-amber-300">{fmt(v.pf_monto_garantias_usd)}</td>
+                      <td className="px-4 py-3 text-right font-mono text-emerald-300 font-semibold">{fmt(v.pf_monto_ganancia_usd)}</td>
+                      {inversores.map(inv => (
+                        <td key={inv.id} className="px-4 py-3 text-right font-mono text-violet-300 font-semibold">
+                          {fmt(repartoPorInversor(v, inv))}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+                {totales && (
+                  <tfoot className="bg-slate-800/80 border-t-2 border-slate-600">
+                    <tr>
+                      <td className="px-4 py-3 text-slate-300 font-semibold text-xs uppercase sticky left-0 bg-slate-800/80" colSpan={2}>
+                        TOTAL ({data.resumen.cantidad_ventas} ventas)
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono font-bold text-slate-100">{fmt(totales.precio)}</td>
+                      <td className="px-4 py-3 text-right font-mono font-bold text-slate-400">{fmt(totales.ctr)}</td>
+                      <td className="px-4 py-3 text-right font-mono font-bold text-success">{fmt(totales.ganancia_bruta)}</td>
+                      <td className="px-4 py-3 text-right font-mono font-bold text-blue-300">{fmt(totales.opex)}</td>
+                      <td className="px-4 py-3 text-right font-mono font-bold text-amber-300">{fmt(totales.reserva)}</td>
+                      <td className="px-4 py-3 text-right font-mono font-bold text-emerald-300">{fmt(totales.ganancia_neta)}</td>
+                      {inversores.map(inv => (
+                        <td key={inv.id} className="px-4 py-3 text-right font-mono font-bold text-violet-300">
+                          {fmt(totalPct > 0 ? totales.reparto * inv.porcentaje / totalPct : 0)}
+                        </td>
+                      ))}
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Página Principal ────────────────────────────────────────────────────────
 
 export function ReportesPage() {
-  const [tab, setTab] = useState<'ventas' | 'estado_cuenta' | 'opex'>('ventas');
+  const [tab, setTab] = useState<'ventas' | 'estado_cuenta' | 'opex' | 'desglose'>('ventas');
+
+  const tabs = [
+    { id: 'ventas' as const, label: 'Reporte de Ventas', icon: TrendingUp },
+    { id: 'desglose' as const, label: 'Desglose por Venta', icon: TableProperties },
+    { id: 'estado_cuenta' as const, label: 'Estado de Cuenta', icon: User },
+    { id: 'opex' as const, label: 'Reporte OPEX', icon: Archive },
+  ];
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-10">
@@ -325,26 +508,19 @@ export function ReportesPage() {
         <p className="text-slate-500 text-sm mt-0.5">Analíticas, estados de cuenta y gastos operativos</p>
       </div>
 
-      <div className="flex gap-2 border-b border-app-border pb-px">
-        <button onClick={() => setTab('ventas')}
-          className={`flex items-center gap-2 px-4 py-2 border-b-2 text-sm font-medium transition-colors ${tab === 'ventas' ? 'border-violet-500 text-violet-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>
-          <TrendingUp size={16} />
-          Reporte de Ventas
-        </button>
-        <button onClick={() => setTab('estado_cuenta')}
-          className={`flex items-center gap-2 px-4 py-2 border-b-2 text-sm font-medium transition-colors ${tab === 'estado_cuenta' ? 'border-violet-500 text-violet-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>
-          <User size={16} />
-          Estado de Cuenta
-        </button>
-        <button onClick={() => setTab('opex')}
-          className={`flex items-center gap-2 px-4 py-2 border-b-2 text-sm font-medium transition-colors ${tab === 'opex' ? 'border-violet-500 text-violet-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>
-          <Archive size={16} />
-          Reporte OPEX
-        </button>
+      <div className="flex gap-2 border-b border-app-border pb-px overflow-x-auto">
+        {tabs.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className={`flex items-center gap-2 px-4 py-2 border-b-2 text-sm font-medium transition-colors whitespace-nowrap ${tab === t.id ? 'border-violet-500 text-violet-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>
+            <t.icon size={16} />
+            {t.label}
+          </button>
+        ))}
       </div>
 
       <div>
         {tab === 'ventas' && <ReporteVentas />}
+        {tab === 'desglose' && <ReporteDesglose />}
         {tab === 'estado_cuenta' && <ReporteEstadoCuenta />}
         {tab === 'opex' && <ReporteOpex />}
       </div>

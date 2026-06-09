@@ -10,7 +10,7 @@
     --card-foreground: 213 31% 96%;
     --popover: 222 47% 11%;
     --popover-foreground: 213 31% 96%;
-    --primary: 263 70% 57%;
+    --primary: 243 75% 59%;
     --primary-foreground: 210 40% 98%;
     --secondary: 217 33% 17%;
     --secondary-foreground: 210 40% 98%;
@@ -22,8 +22,68 @@
     --destructive-foreground: 210 40% 98%;
     --border: 217 33% 17%;
     --input: 217 33% 17%;
-    --ring: 263 70% 57%;
+    --ring: 243 75% 59%;
     --radius: 0.75rem;
+
+    /* Tema oscuro (por defecto) — superficies estilo IMEI Checker */
+    --app-bg:      17 19 28;
+    --app-surface: 26 31 46;
+    --app-sidebar: 20 24 36;
+    --app-border:  30 41 59;
+
+    /* Escala neutra (slate) — valores estándar Tailwind para modo oscuro */
+    --slate-50:  248 250 252;
+    --slate-100: 241 245 249;
+    --slate-200: 226 232 240;
+    --slate-300: 203 213 225;
+    --slate-400: 148 163 184;
+    --slate-500: 100 116 139;
+    --slate-600: 71 85 105;
+    --slate-700: 51 65 85;
+    --slate-800: 30 41 59;
+    --slate-900: 15 23 42;
+    --slate-950: 2 6 23;
+  }
+
+  /* Tema claro — superficies blancas estilo IMEI Checker */
+  .light {
+    --background: 220 35% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 243 75% 59%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 220 20% 94%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 220 20% 94%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 220 20% 94%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 70% 55%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 220 20% 90%;
+    --input: 220 20% 90%;
+    --ring: 243 75% 59%;
+
+    --app-bg:      244 245 250;
+    --app-surface: 255 255 255;
+    --app-sidebar: 255 255 255;
+    --app-border:  226 229 237;
+
+    /* Escala neutra invertida: lo que era texto claro pasa a texto oscuro y viceversa */
+    --slate-50:  2 6 23;
+    --slate-100: 15 23 42;
+    --slate-200: 30 41 59;
+    --slate-300: 51 65 85;
+    --slate-400: 71 85 105;
+    --slate-500: 100 116 139;
+    --slate-600: 148 163 184;
+    --slate-700: 203 213 225;
+    --slate-800: 226 232 240;
+    --slate-900: 241 245 249;
+    --slate-950: 248 250 252;
   }
 }
 
@@ -32,7 +92,7 @@
     @apply border-app-border;
   }
   body {
-    @apply bg-app-bg text-slate-100 antialiased;
+    @apply bg-app-bg text-slate-100 antialiased transition-colors duration-200;
   }
 
   /* Scrollbar personalizado */
@@ -41,13 +101,13 @@
     height: 6px;
   }
   ::-webkit-scrollbar-track {
-    background: #0F1117;
+    @apply bg-app-bg;
   }
   ::-webkit-scrollbar-thumb {
-    background: #1E293B;
+    @apply bg-app-border;
     border-radius: 3px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #334155;
+    @apply bg-slate-600;
   }
 }

@@ -37,6 +37,16 @@ router.get('/', verificaAuth, async (req: Request, res: Response) => {
   }
 });
 
+// ─── GET /equipos/resumen — Resumen de inventario (equipos + accesorios) ─────
+router.get('/resumen', verificaAuth, async (_req: Request, res: Response) => {
+  try {
+    const resumen = await equipoService.obtenerResumenInventario();
+    res.json({ success: true, data: resumen });
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
 // ─── GET /equipos/disponibles — Inventario disponible ────────────────────────
 router.get('/disponibles', verificaAuth, async (_req: Request, res: Response) => {
   try {

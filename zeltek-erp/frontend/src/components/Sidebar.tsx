@@ -2,9 +2,10 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Monitor, Wrench, ShoppingCart,
   Package, ShoppingBag, BarChart3, Receipt, ShieldAlert,
-  TrendingUp, UserCog, Settings2, LogOut,
+  TrendingUp, UserCog, Settings2, LogOut, Wallet, Sun, Moon,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
+import { useThemeStore } from '../stores/themeStore';
 import { usePendientesInbox } from '../hooks/usePendientesInbox';
 
 interface NavItem {
@@ -40,6 +41,7 @@ function NavItemLink({ item }: { item: NavItem }) {
 
 export function Sidebar() {
   const { usuario, logout } = useAuthStore();
+  const { theme, toggleTheme } = useThemeStore();
   const navigate = useNavigate();
   const pendientesInbox = usePendientesInbox();
 
@@ -57,6 +59,7 @@ export function Sidebar() {
     { href: '/gastos', icon: <Receipt size={18} />, label: 'Gastos' },
     { href: '/garantias', icon: <ShieldAlert size={18} />, label: 'Garantías' },
     { href: '/inversores', icon: <TrendingUp size={18} />, label: 'Inversores' },
+    { href: '/fondos', icon: <Wallet size={18} />, label: 'Fondos Virtuales' },
   ];
 
   const navSistema: NavItem[] = [
@@ -74,13 +77,20 @@ export function Sidebar() {
       {/* Logo */}
       <div className="px-4 py-5 border-b border-app-border">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-violet-600 rounded-lg flex items-center justify-center">
+          <div className="w-8 h-8 bg-brand rounded-lg flex items-center justify-center">
             <span className="text-white font-bold text-sm">Z</span>
           </div>
-          <div>
+          <div className="flex-1 min-w-0">
             <p className="text-slate-100 font-bold text-sm">ZELTEK</p>
             <p className="text-slate-500 text-xs">ERP Nicaragua</p>
           </div>
+          <button
+            onClick={toggleTheme}
+            className="text-slate-500 hover:text-slate-100 hover:bg-app-border/50 transition-colors p-2 rounded-lg"
+            title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+          >
+            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
         </div>
       </div>
 

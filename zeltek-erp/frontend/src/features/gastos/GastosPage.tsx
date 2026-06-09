@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Plus, RefreshCw, AlertTriangle, TrendingDown } from 'lucide-react';
 import api from '@/lib/api';
 import { Modal } from '@/components/Modal';
+import { TIMEZONE_NI, hoyNI, primerDiaMesNI } from '@/lib/utils';
 
 const CATEGORIAS = ['LOGISTICA', 'MARKETING', 'HERRAMIENTAS', 'RENTA', 'SERVICIOS', 'OTRO'] as const;
 type Categoria = typeof CATEGORIAS[number];
@@ -34,7 +35,7 @@ function fmt(n: number | string | null | undefined) {
 }
 
 function fmtFecha(iso: string) {
-  return new Date(iso).toLocaleDateString('es-NI', { day: '2-digit', month: 'short', year: 'numeric' });
+  return new Date(iso).toLocaleDateString('es-NI', { day: '2-digit', month: 'short', year: 'numeric', timeZone: TIMEZONE_NI });
 }
 
 const CAT_LABELS: Record<Categoria, string> = {
@@ -50,7 +51,7 @@ const CAT_COLORS: Record<Categoria, string> = {
 // ─── Formulario ──────────────────────────────────────────────────────────────
 
 function FormGasto({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
-  const today = new Date().toISOString().split('T')[0];
+  const today = hoyNI();
   const [concepto, setConcepto] = useState('');
   const [monedaOriginal, setMonedaOriginal] = useState<'USD' | 'NIO' | 'MIXTO'>('USD');
   const [montoOriginal, setMontoOriginal] = useState('');
@@ -209,9 +210,8 @@ export function GastosPage() {
   const [modalAbierto, setModalAbierto] = useState(false);
 
   // Filtros
-  const hoy = new Date();
-  const [desde, setDesde] = useState(new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0]);
-  const [hasta, setHasta] = useState(hoy.toISOString().split('T')[0]);
+  const [desde, setDesde] = useState(primerDiaMesNI());
+  const [hasta, setHasta] = useState(hoyNI());
   const [categoriaFiltro, setCategoriaFiltro] = useState('');
   const [page, setPage] = useState(1);
 
@@ -243,7 +243,6 @@ export function GastosPage() {
   useEffect(() => { cargarGastos(); }, [cargarGastos]);
 
   const opexFondo = fondos.find(f => f.nombre === 'OPEX');
-  const fondosImportantes = fondos.filter(f => ['GANANCIA', 'OPEX', 'GARANTIAS'].includes(f.nombre));
 
   return (
     <div className="space-y-5 max-w-5xl">
@@ -264,27 +263,38 @@ export function GastosPage() {
         </div>
       </div>
 
-      {/* Alerta OPEX negativo */}
-      {opexFondo && opexFondo.saldo_usd < 0 && (
-        <div className="flex items-center gap-3 bg-danger/10 border border-danger/30 rounded-xl px-4 py-3">
-          <AlertTriangle size={16} className="text-danger shrink-0" />
-          <p className="text-danger text-sm font-medium">
-            El fondo OPEX está en negativo ({fmt(opexFondo.saldo_usd)}). Los gastos superan el presupuesto asignado.
-          </p>
-        </div>
-      )}
-
-      {/* Fondos summary */}
-      {fondosImportantes.length > 0 && (
-        <div className="grid grid-cols-3 gap-3">
-          {fondosImportantes.map(f => (
-            <div key={f.id} className={`bg-app-surface border rounded-xl px-4 py-3 ${f.alerta ? 'border-danger/50' : 'border-app-border'}`}>
-              <p className="text-slate-500 text-xs uppercase tracking-wider">{f.nombre}</p>
-              <p className={`text-xl font-bold mt-1 ${f.saldo_usd < 0 ? 'text-danger' : 'text-success'}`}>
-                {fmt(f.saldo_usd)}
+      {/* Banner OPEX */}
+      {opexFondo && (
+        <div className={`rounded-xl border px-5 py-4 flex items-center justify-between gap-4 ${
+          opexFondo.saldo_usd < 0
+            ? 'bg-danger/10 border-danger/40'
+            : opexFondo.saldo_usd < 50
+            ? 'bg-warning/10 border-warning/40'
+            : 'bg-blue-500/5 border-blue-500/30'
+        }`}>
+          <div className="flex items-center gap-3 min-w-0">
+            <div className={`p-2 rounded-lg ${opexFondo.saldo_usd < 0 ? 'bg-danger/20' : 'bg-blue-500/15'}`}>
+              <TrendingDown size={18} className={opexFondo.saldo_usd < 0 ? 'text-danger' : 'text-blue-400'} />
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 uppercase tracking-wider font-medium">Fondo Operativo disponible para gastos</p>
+              <p className={`text-2xl font-bold tabular-nums mt-0.5 ${opexFondo.saldo_usd < 0 ? 'text-danger' : opexFondo.saldo_usd < 50 ? 'text-warning' : 'text-blue-300'}`}>
+                {fmt(opexFondo.saldo_usd)}
               </p>
             </div>
-          ))}
+          </div>
+          {opexFondo.saldo_usd < 0 && (
+            <div className="flex items-center gap-2 shrink-0">
+              <AlertTriangle size={15} className="text-danger" />
+              <span className="text-danger text-xs font-medium">Fondo en negativo</span>
+            </div>
+          )}
+          {opexFondo.saldo_usd >= 0 && opexFondo.saldo_usd < 50 && (
+            <div className="flex items-center gap-2 shrink-0">
+              <AlertTriangle size={15} className="text-warning" />
+              <span className="text-warning text-xs font-medium">Saldo bajo</span>
+            </div>
+          )}
         </div>
       )}
 

@@ -1,12 +1,175 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, RefreshCw, ChevronLeft, ChevronRight, Edit, ShieldCheck, Wrench } from 'lucide-react';
+import { Plus, RefreshCw, ChevronLeft, ChevronRight, Edit, ShieldCheck, Wrench, Cpu } from 'lucide-react';
 import { reparacionesService, Reparacion, CrearReparacionDTO } from './reparacionesService';
+import { ModalCambioEstado, type EquipoRow } from '@/features/inventario/InventarioPage';
 import { Modal } from '@/components/Modal';
 import api from '@/lib/api';
+import { TIMEZONE_NI } from '@/lib/utils';
 
 function fmtFecha(iso: string | null | undefined) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('es-NI', { day: '2-digit', month: 'short', year: 'numeric' });
+  return new Date(iso).toLocaleDateString('es-NI', { day: '2-digit', month: 'short', year: 'numeric', timeZone: TIMEZONE_NI });
+}
+
+// ─── Equipos internos enviados a taller (EN_TALLER) ──────────────────────────
+// Distinto de las órdenes de reparación de clientes: estos son equipos propios
+// del inventario (enviados desde Compras o Inventario) en proceso de reparación
+// antes de quedar DISPONIBLE para la venta.
+
+// Última vez que el equipo entró a EN_TALLER — alimenta "Problema reportado" / "Fecha ingreso"
+function ingresoTaller(eq: EquipoRow) {
+  const entrada = eq.historial_estados?.find(h => h.estado_nuevo === 'EN_TALLER');
+  return { problema: entrada?.notas ?? '—', fecha: entrada?.created_at ?? null };
+}
+
+function diasEnTaller(iso: string | null): number | null {
+  if (!iso) return null;
+  const ms = Date.now() - new Date(iso).getTime();
+  return Math.max(0, Math.floor(ms / 86_400_000));
+}
+
+// Umbral de alerta por tiempo en taller — RN informal: >7 días es demora notable, 3-7 días a vigilar
+function BadgeDiasTaller({ dias }: { dias: number | null }) {
+  if (dias == null) return <span className="text-slate-500 text-xs">—</span>;
+
+  const estilo = dias >= 7
+    ? 'bg-danger/10 text-danger border-danger/30'
+    : dias >= 3
+      ? 'bg-warning/10 text-warning border-warning/30'
+      : 'bg-slate-800 text-slate-400 border-slate-700';
+
+  const etiqueta = dias === 0 ? 'Hoy' : dias === 1 ? '1 día' : `${dias} días`;
+
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold ${estilo}`}>
+      {dias >= 7 && '⚠️ '}{etiqueta}
+    </span>
+  );
+}
+
+function EquiposEnTallerList() {
+  const [equipos, setEquipos] = useState<EquipoRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [equipoSeleccionado, setEquipoSeleccionado] = useState<EquipoRow | null>(null);
+
+  const cargar = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.get<{ items: EquipoRow[] }>('/equipos?estados=EN_TALLER&limit=100');
+      setEquipos(res.data.items);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  return (
+    <>
+      <div className="bg-app-surface rounded-card border border-app-border overflow-hidden">
+        {loading ? (
+          <div className="py-16 text-center text-slate-500 text-sm animate-pulse">Cargando...</div>
+        ) : equipos.length === 0 ? (
+          <div className="py-16 text-center text-slate-500 text-sm">No hay equipos en taller actualmente</div>
+        ) : (
+          <>
+            {/* Tarjetas — Mobile (< md): la tabla completa no entra cómodamente en pantallas angostas */}
+            <div className="md:hidden divide-y divide-app-border">
+              {equipos.map(eq => {
+                const { problema, fecha } = ingresoTaller(eq);
+                const dias = diasEnTaller(fecha);
+                return (
+                  <div key={eq.id} className="p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-slate-100 font-medium truncate">{eq.marca} {eq.modelo}</p>
+                        <p className="text-slate-500 text-xs">
+                          {eq.condicion === 'NUEVO' ? 'Nuevo' : 'Seminuevo'} · <span className="font-mono">{eq.numero_serie}</span>
+                        </p>
+                      </div>
+                      <BadgeDiasTaller dias={dias} />
+                    </div>
+                    <div className="text-xs space-y-1">
+                      <p className="text-slate-500">Problema: <span className="text-slate-300">{problema}</span></p>
+                      <p className="text-slate-500">Ingreso: <span className="text-slate-300">{fmtFecha(fecha)}</span></p>
+                    </div>
+                    <button
+                      onClick={() => setEquipoSeleccionado(eq)}
+                      className="w-full py-2 rounded-lg bg-success/10 hover:bg-success/20 text-success text-xs font-semibold transition-colors border border-success/30"
+                    >
+                      ✓ Marcar reparado
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Tabla — Desktop (md+) */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-app-border bg-slate-800/50">
+                    <th className="text-left px-4 py-3 text-slate-500 font-medium text-xs uppercase">Producto</th>
+                    <th className="text-left px-4 py-3 text-slate-500 font-medium text-xs uppercase">Serie / ID</th>
+                    <th className="text-left px-4 py-3 text-slate-500 font-medium text-xs uppercase">Problema reportado</th>
+                    <th className="text-left px-4 py-3 text-slate-500 font-medium text-xs uppercase">Fecha ingreso</th>
+                    <th className="text-left px-4 py-3 text-slate-500 font-medium text-xs uppercase">Tiempo en taller</th>
+                    <th className="px-4 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-app-border">
+                  {equipos.map(eq => {
+                    const { problema, fecha } = ingresoTaller(eq);
+                    const dias = diasEnTaller(fecha);
+                    return (
+                      <tr key={eq.id} className="hover:bg-slate-800/30 transition-colors">
+                        <td className="px-4 py-3">
+                          <div>
+                            <p className="text-slate-100 font-medium">{eq.marca} {eq.modelo}</p>
+                            <p className="text-slate-500 text-xs">{eq.condicion === 'NUEVO' ? 'Nuevo' : 'Seminuevo'}</p>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="font-mono text-slate-400 text-xs">{eq.numero_serie}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-slate-400 text-xs truncate max-w-[220px] block">{problema}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-slate-400 text-xs">{fmtFecha(fecha)}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <BadgeDiasTaller dias={dias} />
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            onClick={() => setEquipoSeleccionado(eq)}
+                            className="px-3 py-1.5 rounded-lg bg-success/10 hover:bg-success/20 text-success text-xs font-semibold transition-colors border border-success/30"
+                          >
+                            ✓ Marcar reparado
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+
+      <Modal open={!!equipoSeleccionado} onClose={() => setEquipoSeleccionado(null)} title={equipoSeleccionado ? `${equipoSeleccionado.marca} ${equipoSeleccionado.modelo}` : ''}>
+        {equipoSeleccionado && (
+          <ModalCambioEstado
+            equipo={equipoSeleccionado}
+            onClose={() => setEquipoSeleccionado(null)}
+            onSuccess={cargar}
+          />
+        )}
+      </Modal>
+    </>
+  );
 }
 
 // ─── Modal Crear Reparación/Garantía ─────────────────────────────────────────
@@ -297,8 +460,8 @@ export function ReparacionesPage({ tipo }: { tipo: 'externa' | 'garantia' }) {
   const [showForm, setShowForm] = useState(false);
   const [reparacionToEdit, setReparacionToEdit] = useState<Reparacion | null>(null);
   
-  // Tab state for garantias
-  const [tab, setTab] = useState<'reclamos' | 'polizas'>('reclamos');
+  // Tabs: garantía (reclamos/pólizas) o externa (órdenes/equipos propios en taller)
+  const [tab, setTab] = useState<'reclamos' | 'polizas' | 'ordenes' | 'taller'>(tipo === 'garantia' ? 'reclamos' : 'taller');
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -349,8 +512,25 @@ export function ReparacionesPage({ tipo }: { tipo: 'externa' | 'garantia' }) {
         </div>
       )}
 
+      {tipo === 'externa' && (
+        <div className="flex gap-2 border-b border-app-border pb-px mb-4">
+          <button onClick={() => setTab('taller')}
+            className={`flex items-center gap-2 px-4 py-2 border-b-2 text-sm font-medium transition-colors ${tab === 'taller' ? 'border-violet-500 text-violet-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>
+            <Cpu size={16} />
+            Equipos en Taller
+          </button>
+          <button onClick={() => setTab('ordenes')}
+            className={`flex items-center gap-2 px-4 py-2 border-b-2 text-sm font-medium transition-colors ${tab === 'ordenes' ? 'border-violet-500 text-violet-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>
+            <Wrench size={16} />
+            Órdenes de Clientes
+          </button>
+        </div>
+      )}
+
       {tipo === 'garantia' && tab === 'polizas' ? (
         <PolizasVigentesList />
+      ) : tipo === 'externa' && tab === 'taller' ? (
+        <EquiposEnTallerList />
       ) : (
         <>
           <div className="bg-app-surface rounded-card border border-app-border overflow-hidden">

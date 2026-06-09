@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { TrendingUp, TrendingDown, Monitor, ShoppingCart, AlertTriangle, Inbox, Wrench } from 'lucide-react';
 import api from '@/lib/api';
+import { CapitalDinamicoCard } from './CapitalDinamicoCard';
 
 interface KPIs {
   inventario: {
@@ -21,6 +22,12 @@ interface KPIs {
   inbox_pendiente: number;
   reparaciones_activas: number;
   gastos_mes_usd: number;
+  capital_dinamico: {
+    liquido: number;
+    disponible: number;
+    taller: number;
+    accesorios: number;
+  };
 }
 
 interface VentaReciente {
@@ -111,6 +118,14 @@ export function DashboardPage() {
         <h1 className="text-xl font-bold text-slate-100">Dashboard</h1>
         <p className="text-slate-500 text-sm mt-0.5">Resumen operativo del mes actual</p>
       </div>
+
+      {/* Capital del Negocio — full width */}
+      <CapitalDinamicoCard
+        liquido={kpis.capital_dinamico.liquido}
+        disponible={kpis.capital_dinamico.disponible}
+        taller={kpis.capital_dinamico.taller}
+        accesorios={kpis.capital_dinamico.accesorios}
+      />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Plus, RefreshCw, Key, Unlock, Shield, ShoppingBag, Wrench } from 'lucide-react';
 import api from '@/lib/api';
 import { Modal } from '@/components/Modal';
+import { TIMEZONE_NI } from '@/lib/utils';
 
 type Rol = 'ADMIN' | 'VENDEDOR' | 'TECNICO';
 
@@ -37,7 +38,7 @@ const ROL_ICONS: Record<Rol, React.ReactNode> = {
 
 function fmtFecha(iso: string | null) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('es-NI', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return new Date(iso).toLocaleDateString('es-NI', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: TIMEZONE_NI });
 }
 
 function esBloqueado(u: Usuario) {

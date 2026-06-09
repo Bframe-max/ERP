@@ -23,7 +23,7 @@
 
 | # | Pilar | Qué resuelve |
 |---|-------|-------------|
-| 1 | Bandeja de Entrada | Gmail → Google Apps Script → triage móvil sin API de eBay |
+| 1 | Compras (Equipos + Accesorios) | Registro manual/automático eBay, triage y lotes de accesorios desde una sola pantalla |
 | 2 | Máquina de Estados | 8 estados del equipo con transiciones estrictas |
 | 3 | Fórmula CTR | Costo Total Real calculado en backend con tarifas configurables |
 | 4 | Checkout Blindado | Venta con foto obligatoria, factura PDF, garantía automática |
@@ -54,37 +54,73 @@
 | Etapa | Nombre | Qué registra el sistema |
 |-------|--------|------------------------|
 | 1 | Orden de Compra | URL eBay, proveedor, precio USD, tracking |
-| 2 | Recepción | Fecha llegada, número de serie, fotos |
+| 2 | Recepción | Fecha llegada, número de serie, peso y costo de envío a Nicaragua |
 | 3 | Diagnóstico | Batería, RAM, almacenamiento, pantalla |
 | 4 | Preparación | Limpieza, repuestos, instalación OS, costo prep |
-| 5 | Disponible | CTR calculado, precio de venta, fotos finales |
+| 5 | Disponible | CTR calculado, precio de venta |
 | 6 | Venta | Cliente, precio, método pago, factura, garantía |
 | 7 | Post-venta | Garantía activa/vencida, reclamos |
 
 ---
 
-## 2. PILAR 1 — BANDEJA DE ENTRADA (INBOX)
+## 2. PILAR 1 — COMPRAS (EQUIPOS Y ACCESORIOS)
 
-### 2.1 Flujo Completo
+### 2.1 Página Unificada de Compras
 
-1. **eBay** → envía correo "Order Confirmed" a Gmail.
-2. **n8n/Zapier** → detecta el correo, extrae: nombre artículo, precio, tracking, vendedor.
-3. **n8n** → POST `/api/v1/inbox` con datos extraídos.
-4. **Backend** → inserta en `compras_pendientes` con estado `pendiente_triage`.
-5. **Admin (móvil)** → abre la Bandeja de Entrada.
-6. **Triage**: "Ingresar a Inventario" → crea equipo con estado COMPRADO. "Descartar" → marca como descartado, NO afecta finanzas.
+La pantalla **Compras** tiene dos tabs:
 
-### 2.2 Reglas de Negocio — Inbox
+#### Tab Equipos — Flujo de compra de laptop/dispositivo (logística manual primero, automatización después)
+
+La compra ya **no** pasa directo de "registrada" a "inventario". El admin gestiona el ciclo de vida logístico completo de cada compra dentro del propio módulo de Compras, reflejando el viaje real del equipo (compra en EE.UU. → barco a Miami → agencia interna lo trae a Nicaragua → recepción → ingreso a inventario).
+
+**Registro (manual primero — eBay/n8n queda para una fase posterior):**
+1. Admin pulsa "Registrar Compra eBay" (o entrada manual) → llena vendedor, tracking (opcional), fecha, producto del catálogo, cantidad, costo total de compra, costo de envío.
+2. Backend crea entrada en `compras_pendientes` con `estado = pendiente`.
+3. (Futuro) n8n podrá depositar compras automáticamente vía `POST /api/v1/inbox` con el mismo estado inicial `pendiente`.
+
+**Ciclo de estados de la compra (`EstadoCompra`) — 5 pasos:**
+
+| Estado | Significado | Quién/cuándo avanza |
+|---|---|---|
+| `pendiente` | Comprada, viajando hacia la bodega de la agencia en Miami | Estado inicial al registrar |
+| `en_miami` | La agencia confirmó recepción en su bodega de Miami | Admin pulsa "Marcar en Bodega Miami" |
+| `en_transito_nicaragua` | En camino a Nicaragua, con tracking interno de la agencia (warehouse track) | Admin agrega el **tracking interno** (tracking de la agencia que trae el equipo a Nicaragua, distinto del tracking original de compra), el **peso real** y el **tipo de envío** (aéreo/marítimo). El sistema calcula automáticamente el `costo_logistico_usd` (peso × tarifa configurada en Settings según tipo de envío) y lo guarda para usarlo luego en el CTR del equipo |
+| `recibido` | Llegó a Nicaragua — compra completada, lista para pasar a inventario | Admin pulsa "Marcar Recibido en Nicaragua" |
+| `ingresado` | Triage completado — pasó a inventario como `equipo` | Admin completa el formulario de ingreso (ver abajo) |
+
+Adicionalmente, `descartado` es un estado terminal alternativo: la compra puede **descartarse en cualquier momento antes de `ingresado`** (cancelación, devolución, rechazo), con razón obligatoria. Una vez `ingresado`, la compra queda fija como historial y no se puede modificar ni descartar.
+
+**Ingreso al inventario (solo disponible cuando `estado = recibido`):**
+El formulario de "Ingresar al inventario" pide los datos completos del equipo (serie, marca, modelo, specs: procesador/RAM/almacenamiento, inversor, costo base, precio de venta sugerido) **y además pregunta explícitamente "¿Llegó completa y lista para la venta?"**:
+- **Sí** → se crea el `equipo` con `estado = COMPRADO` (flujo normal: pasa luego por taller/preparación → disponible). Aplica la lógica existente de cargador: si `requiere_cargador = true`, se reservará un cargador del inventario de accesorios al prepararlo.
+- **No** → el admin detalla qué le falta o qué necesita reparación (ej. vino sin RAM, sin disco, pantalla dañada, etc. — campo obligatorio). El `equipo` se crea directamente con `estado = EN_TALLER` y esa descripción queda guardada en sus notas, de modo que **no se considera disponible para la venta automáticamente**: debe pasar por el flujo normal de preparación en taller antes de poder venderse.
+
+- **Descartar** → razón obligatoria → `estado = descartado`. Nunca se borra físicamente.
+
+#### Tab Accesorios — Lotes
+
+- Registro de lotes de cargadores, cables, repuestos.
+- Costo unitario calculado automáticamente: `(precio_lote + flete) / cantidad`.
+- Los accesorios se asignan a equipos desde el módulo Inventario.
+
+### 2.2 Reglas de Negocio — Compras
 
 **RN-INBOX-001: Deduplicación**
 - `tracking_number` es UNIQUE en `compras_pendientes`. Si llega duplicado → rechazar y alertar.
 
-**RN-INBOX-002: Triage Obligatorio**
-- Sin triage > 5 días → alerta automática al admin.
+**RN-INBOX-002: Seguimiento logístico obligatorio**
+- Compras "en curso" (`pendiente`, `en_miami`, `en_transito_nicaragua`, `recibido`) que llevan más de N días sin avanzar de estado → alerta automática al admin (configurable en Settings `alerta_inbox_dias`).
+- Badge numérico en el menú lateral muestra compras activas en tiempo real.
+- Las transiciones de estado son secuenciales y validadas en el backend (no se puede saltar pasos): `pendiente → en_miami → en_transito_nicaragua → recibido → ingresado`. Cada transición valida el estado actual, registra el timestamp correspondiente (`en_miami_at`, `en_transito_at`, `recibido_at`) y queda auditada (`AVANZAR_ESTADO_COMPRA`).
 
-**RN-INBOX-003: Compra Personal vs Negocio**
-- "Ingresar" → crea equipo, costo_base suma a Capital en Tránsito.
-- "Descartar" → `estado=descartado`, `deleted_at=NOW()`. Nunca se borra físicamente.
+**RN-INBOX-003: Ingreso al inventario**
+- Solo se puede "Ingresar al inventario" cuando `estado = recibido` (la compra está físicamente en Nicaragua).
+- "Ingresar" → crea equipo (en `COMPRADO` o `EN_TALLER` según completitud, ver arriba), `costo_base` suma al Capital en Tránsito del inversor asignado, y la compra pasa a `estado = ingresado`.
+- "Descartar" → permitido en cualquier estado anterior a `ingresado` → `estado = descartado`. No afecta finanzas.
+
+### 2.3 Integración n8n (Automática)
+
+El endpoint `POST /api/v1/inbox` acepta API Key (`x-api-key` header). La clave se configura en `.env` como `API_KEY_N8N`. n8n o cualquier webhook puede depositar compras sin autenticación JWT.
 
 ---
 
@@ -110,7 +146,7 @@
 | COMPRADO | EN_BODEGA_MIAMI, EN_RECLAMO |
 | EN_BODEGA_MIAMI | EN_TRANSITO, EN_RECLAMO |
 | EN_TRANSITO | EN_TALLER, EN_RECLAMO |
-| EN_TALLER | DISPONIBLE (solo si peso ingresado + mínimo 1 foto) |
+| EN_TALLER | DISPONIBLE (solo si peso ingresado + cargador asignado, si aplica) |
 | DISPONIBLE | VENDIDO (solo via checkout completo), EN_TALLER |
 | EN_RECLAMO | DISPONIBLE (reclamo ganado), DEVUELTO (reclamo perdido) |
 | VENDIDO | EN_RECLAMO (post-venta), EN_TALLER (garantía) |
@@ -120,7 +156,6 @@
 
 **RN-STATE-001: EN_TALLER → DISPONIBLE (Bloqueante)**
 - BLOQUEA si `peso_real_libras` es NULL o 0.
-- BLOQUEA si `foto_urls` tiene menos de 1 elemento.
 - BLOQUEA si `requiere_cargador = true` y NO tiene accesorio "Cargador" asignado como "incluido". Si `requiere_cargador = false` (ya viene con cargador o no aplica) → no verifica.
 - Al aprobar: recalcula CTR con peso real + costo accesorios asignados.
 
@@ -477,7 +512,15 @@ Categorías: `LOGISTICA | MARKETING | HERRAMIENTAS | RENTA | SERVICIOS | OTRO`
 Ganancia Neta del Mes = Σ(ganancias productos) − Σ(OPEX) − Σ(reintegros del mes) − Σ(costo_reclamos)
 ```
 
-### 7.3 Garantías y Reclamos
+### 7.11 Módulo de Fondos Virtuales (UI / Dashboard)
+
+Este módulo es una pantalla interactiva dedicada a la visualización de todos los saldos de fondos (OPEX, Repartos, Ganancia, Garantías) y el Capital Global Invertido.
+
+- **Dashboard Principal**: Muestra "cards" (tarjetas) con los saldos actuales de cada fondo y el consolidado de capital invertido por todos los socios vs. capital retornado.
+- **Historial de Movimientos**: Al seleccionar un fondo, despliega una tabla que lee de `historial_fondos`, permitiendo rastrear el origen de cada entrada y salida (ej. abonos de ventas o descuentos por OPEX).
+- **Rutas API**: `GET /api/v1/fondos` (obtiene todos los fondos y el consolidado de capital), y `GET /api/v1/fondos/:id/historial` (historial detallado).
+
+### 7.12 Garantías y Reclamos
 
 Estados del reclamo: `ABIERTO → EN_DIAGNOSTICO → RESUELTO | RECHAZADO`
 
@@ -515,7 +558,7 @@ Generación: react-pdf en frontend (browser). Backend solo provee JSON vía `GET
 |---|-------|---------|
 | F-01 | Inbox eBay | Nuevo email "Order Confirmed" en Gmail |
 | F-02 | Cierre de Mes | Cron día 1 de cada mes 8:00 AM |
-| F-03 | Alerta Inbox Stale | Cron diario — inbox > 5 días sin triage |
+| F-03 | Alerta Compras Stale | Cron diario — compras activas > 5 días sin avanzar de estado |
 | F-04 | Alerta Garantías | Cron diario — garantías vencen en 15 días |
 | F-05 | Alerta Reclamos | Webhook — nuevo reclamo creado |
 
@@ -573,6 +616,7 @@ Acciones auditables:
 | RESOLVER_RECLAMO | Estado → RESUELTO/RECHAZADO |
 | MODIFICAR_SETTING | Cambio en settings |
 | TRIAGE_INBOX | Ingresar o descartar del inbox |
+| AVANZAR_ESTADO_COMPRA | Avance logístico de una compra (en Miami / tracking interno / recibido) |
 | LOGIN_EXITOSO | Login correcto |
 | MARCAR_LIQUIDADO | Reparto inversor liquidado |
 | REGISTRAR_GASTO | Nuevo gasto operativo |
@@ -1068,17 +1112,32 @@ id                UUID PK
 fuente            ENUM(GMAIL_EBAY | MANUAL)
 nombre_articulo   TEXT NOT NULL
 precio_usd        DECIMAL(10,2) NOT NULL
-tracking_number   VARCHAR UNIQUE
+costo_envio_usd   DECIMAL(10,2) NULL
+cantidad          INTEGER NOT NULL DEFAULT 1
+fecha_compra      TIMESTAMPTZ NULL
+producto_id       UUID FK → catalogo_productos NULL
+tracking_number   VARCHAR UNIQUE         -- tracking original de la compra (ej. eBay/courier internacional)
+tracking_interno  VARCHAR NULL           -- "warehouse track": tracking de la agencia que trae el equipo a Nicaragua
+peso_real_libras    DECIMAL(6,2) NULL    -- Capturado junto con el tracking interno al recibir en Bodega Miami
+tipo_envio          ENUM(aereo | maritimo) -- Define la tarifa por libra a aplicar (Settings)
+costo_logistico_usd DECIMAL(10,2) NULL   -- Calculado en backend (peso × tarifa según tipo_envio) y guardado físicamente
 vendedor_ebay     VARCHAR
 url_ebay          TEXT
 raw_email_data    JSONB
-estado            ENUM(pendiente_triage | ingresado | descartado)
+estado            ENUM(pendiente | en_miami | en_transito_nicaragua | recibido | ingresado | descartado)
 equipo_id         UUID FK → equipos NULL
 descartado_razon  TEXT NULL
+en_miami_at       TIMESTAMPTZ NULL
+en_transito_at    TIMESTAMPTZ NULL
+recibido_at       TIMESTAMPTZ NULL
 triaged_at        TIMESTAMPTZ NULL
 triaged_by        UUID FK → usuarios NULL
 created_at        TIMESTAMPTZ
 ```
+
+**Ciclo de vida de `estado` (`EstadoCompra`):**
+`pendiente` (comprado, viajando a bodega Miami) → `en_miami` (recibido en bodega Miami) → `en_transito_nicaragua` (en camino con tracking interno de la agencia) → `recibido` (llegó a Nicaragua, compra completada) → `ingresado` (triage hecho, pasó a `equipos`).
+`descartado` es alcanzable desde cualquier estado anterior a `ingresado`.
 
 ### 12.3 Tabla: inversores
 
@@ -1110,7 +1169,7 @@ bateria_ciclos            INTEGER NULL
 bateria_salud_pct         INTEGER NULL
 estado                    ENUM(COMPRADO | EN_BODEGA_MIAMI | EN_TRANSITO | EN_TALLER | DISPONIBLE | VENDIDO | EN_RECLAMO | DEVUELTO) NOT NULL
 costo_base_usd            DECIMAL(10,2) NOT NULL
-peso_real_libras           DECIMAL(6,2) NULL  -- obligatorio para → DISPONIBLE
+peso_real_libras           DECIMAL(6,2) NULL  -- obligatorio para → DISPONIBLE; copiado desde compras_pendientes al ingresar al inventario
 tipo_envio                ENUM(aereo | maritimo)
 costo_logistico_usd       DECIMAL(10,2)      -- Calculado en backend (peso × tarifa settings) y guardado físicamente
 costo_acondicionamiento_usd DECIMAL(10,2)
@@ -1121,7 +1180,6 @@ precio_venta_usd          DECIMAL(10,2) NULL
 estado_incidencia         ENUM(DISPUTA_ABIERTA | RESUELTO) NULL
 plataforma_disputa        ENUM(PAYPAL | EBAY | OTRO) NULL
 notas_resolucion          TEXT NULL
-foto_urls                 TEXT[] DEFAULT {}
 visible_en_inventario     BOOLEAN DEFAULT true
 requiere_cargador         BOOLEAN DEFAULT true   -- false si ya viene con cargador de eBay
 condicion                 ENUM(NUEVO | SEMINUEVO) DEFAULT SEMINUEVO -- Define garantía por defecto (4 meses/120 días seminuevo, 12 meses/365 días nuevo)
@@ -1604,10 +1662,13 @@ enum FuenteInbox {
   MANUAL
 }
 
-enum EstadoInbox {
-  pendiente_triage
-  ingresado
-  descartado
+enum EstadoCompra {
+  pendiente              // Comprado, viajando hacia la bodega de Miami
+  en_miami               // La agencia confirmó recepción en bodega Miami
+  en_transito_nicaragua  // En camino a Nicaragua, con tracking interno de la agencia
+  recibido               // Llegó a Nicaragua — compra completada, lista para triage
+  ingresado              // Triage completado — pasó a inventario
+  descartado             // Cancelada / devuelta / rechazada
 }
 
 enum TipoEquipo {
@@ -1745,18 +1806,30 @@ model compras_pendientes {
   fuente            FuenteInbox       @default(MANUAL)
   nombre_articulo   String            @db.Text
   precio_usd        Decimal           @db.Decimal(10, 2)
+  costo_envio_usd   Decimal?          @db.Decimal(10, 2)
+  cantidad          Int               @default(1)
+  fecha_compra      DateTime?         @db.Timestamptz
+  producto_id       String?           @db.Uuid
   tracking_number   String?           @unique @db.VarChar(255)
+  tracking_interno  String?           @db.VarChar(255)
+  peso_real_libras    Decimal?        @db.Decimal(6, 2)
+  tipo_envio          TipoEnvio?      @default(aereo)
+  costo_logistico_usd Decimal?        @db.Decimal(10, 2)
   vendedor_ebay     String?           @db.VarChar(255)
   url_ebay          String?           @db.Text
   raw_email_data    Json?
-  estado            EstadoInbox       @default(pendiente_triage)
+  estado            EstadoCompra      @default(pendiente)
   descartado_razon  String?           @db.Text
+  en_miami_at       DateTime?         @db.Timestamptz
+  en_transito_at    DateTime?         @db.Timestamptz
+  recibido_at       DateTime?         @db.Timestamptz
   triaged_at        DateTime?         @db.Timestamptz
   triaged_by        String?           @db.Uuid
   created_at        DateTime          @default(now()) @db.Timestamptz
   
   // Relaciones
-  usuario_triage    usuarios?         @relation(fields: [triaged_by], references: [id])
+  usuario_triage    usuarios?               @relation(fields: [triaged_by], references: [id])
+  producto          catalogo_productos?     @relation(fields: [producto_id], references: [id])
   equipos           equipos[]
 }
 
@@ -1804,8 +1877,8 @@ model equipos {
   precio_venta_usd            Decimal?           @db.Decimal(10, 2)
   estado_incidencia           EstadoIncidencia?
   plataforma_disputa          PlataformaDisputa?
+  notas                       String?            @db.Text  -- Notas generales del equipo (ej. detalle de qué llegó incompleto/dañado al ingresarlo desde una compra)
   notas_resolucion            String?            @db.Text
-  foto_urls                   String[]           @default([])
   visible_en_inventario       Boolean            @default(true)
   requiere_cargador           Boolean            @default(true)
   costo_accesorios_usd        Decimal            @default(0) @db.Decimal(10, 2)
@@ -2219,10 +2292,13 @@ Convenciones:
 
 | Método | Endpoint | Descripción |
 |--------|----------|-------------|
-| POST | /inbox | n8n deposita correo. API key. |
-| GET | /inbox | Lista pendientes triage. ADMIN. |
-| POST | /inbox/:id/ingresar | Triage: ingresa a inventario. |
-| POST | /inbox/:id/descartar | Triage: descarta. |
+| POST | /inbox | Deposita compra (`estado = pendiente`). n8n con API key o admin manual con JWT. |
+| GET | /inbox | Lista compras activas + historial. ADMIN. |
+| GET | /inbox/alertas | Compras "en curso" sin avance > N días. ADMIN. |
+| POST | /inbox/:id/en-miami | Logística: la agencia confirma recepción en bodega Miami y, en la misma acción, captura tracking interno (warehouse track), peso real y tipo de envío; calcula `costo_logistico_usd` y pasa directo a tránsito (`pendiente → en_transito_nicaragua`). ADMIN. |
+| POST | /inbox/:id/recibido | Logística: marca recibido en Nicaragua, compra completada (`en_transito_nicaragua → recibido`). ADMIN. |
+| POST | /inbox/:id/ingresar | Triage: ingresa a inventario (solo si `estado = recibido`); pregunta completitud → crea equipo en `COMPRADO` o `EN_TALLER`. |
+| POST | /inbox/:id/descartar | Triage: descarta (permitido en cualquier estado previo a `ingresado`). |
 
 ### 12.3 Equipos
 
@@ -2235,7 +2311,6 @@ Convenciones:
 | POST | /equipos | Crear (solo desde triage). |
 | PATCH | /equipos/:id | Actualizar campos. |
 | PATCH | /equipos/:id/estado | Cambiar estado via StateMachine. |
-| POST | /equipos/:id/fotos | Upload a Cloudinary. |
 | POST | /equipos/:id/reclamo | Abrir disputa. |
 
 ### 12.4 Ventas
@@ -2343,7 +2418,7 @@ Convenciones:
 | ⚠️ Capital Perdido Pendiente | SUM(saldo_pendiente_usd) de perdidas_capital WHERE estado != RECUPERADO |
 | Garantías Activas en Taller | COUNT(*) de ordenes_reparacion WHERE tipo = garantia AND estado NOT IN (ENTREGADO, CANCELADO) |
 | Garantías por Vencer | COUNT(*) de ventas WHERE garantia_vence BETWEEN NOW() AND NOW() + 15 días |
-| Inbox Pendiente | COUNT(*) de compras_pendientes WHERE estado = pendiente_triage |
+| Compras por Recibir/Triagear | COUNT(*) de compras_pendientes WHERE estado = recibido |
 | Stock Accesorios | COUNT(*) por categoría de accesorios_inventario WHERE estado = disponible |
 | Alerta Stock Bajo | Categorías de accesorios con ≤ 3 unidades disponibles |
 
@@ -2636,7 +2711,7 @@ Reglas de código:
 
 - [ ] StateMachine rechaza transiciones inválidas con error 422
 - [ ] CTR se recalcula al cambiar peso/acondicionamiento
-- [ ] EN_TALLER → DISPONIBLE bloqueado sin peso, sin foto, y sin cargador (si requiere)
+- [ ] EN_TALLER → DISPONIBLE bloqueado sin peso y sin cargador (si requiere)
 - [ ] Asignar accesorio a equipo suma costo al CTR automáticamente
 - [ ] Accesorio asignado no puede venderse suelto ni asignarse a otro equipo
 - [ ] Lote de accesorios genera N unidades individuales en inventario
@@ -2705,7 +2780,6 @@ El sistema tiene un flag en `settings` llamado `modo_migracion` (BOOLEAN, defaul
 
 | Validación normal | Comportamiento en modo migración |
 |------------------|--------------------------------|
-| Foto obligatoria para DISPONIBLE | Se permite sin foto. Campo `foto_urls` queda vacío. |
 | Foto evidencia obligatoria en venta | Se permite sin evidencia. `evidencia_entrega_url` puede ser NULL. |
 | Cargador obligatorio | No se valida. `requiere_cargador` se ignora. |
 | Peso obligatorio | Se permite sin peso. `peso_real_libras` queda NULL. |
@@ -2736,7 +2810,7 @@ Esto permite que los reportes puedan filtrar: "mostrar solo datos del nuevo sist
 | 1 | Admin activa `modo_migracion = true` en Settings. Sistema muestra banner naranja: "MODO MIGRACIÓN ACTIVO — validaciones relajadas." |
 | 2 | Admin sube CSV/Excel con datos de Google Sheets o exporta desde SQL Server. |
 | 3 | El sistema procesa el archivo fila por fila. Para cada registro: crea el equipo/venta/cliente con `origen = MIGRACION` y las fechas originales. |
-| 4 | Los registros sin foto se crean con `foto_urls = []` y `evidencia_entrega_url = NULL`. |
+| 4 | Los registros de ventas migradas sin evidencia se crean con `evidencia_entrega_url = NULL`. |
 | 5 | Los equipos ya vendidos se crean directamente en estado VENDIDO sin pasar por la StateMachine. |
 | 6 | Al terminar la importación, admin desactiva `modo_migracion = false`. |
 | 7 | El sistema vuelve a las validaciones normales. Los registros migrados quedan marcados con `origen = MIGRACION`. |

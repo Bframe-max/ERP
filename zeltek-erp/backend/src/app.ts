@@ -20,6 +20,7 @@ import settingsRoutes from './presentation/routes/settings.routes';
 import reportesRoutes from './presentation/routes/reportes.routes';
 import dashboardRoutes from './presentation/routes/dashboard.routes';
 import auditRoutes from './presentation/routes/audit.routes';
+import fondosRoutes from './presentation/routes/fondos.routes';
 
 const app = express();
 
@@ -71,6 +72,7 @@ app.use(`${API}/settings`, settingsRoutes);
 app.use(`${API}/reportes`, reportesRoutes);
 app.use(`${API}/dashboard`, dashboardRoutes);
 app.use(`${API}/audit-logs`, auditRoutes);
+app.use(`${API}/fondos`, fondosRoutes);
 
 // 404
 app.use((_req, res) => {

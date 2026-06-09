@@ -47,6 +47,14 @@ router.get('/disponibles', verificaAuth, async (req: Request, res: Response) => 
   } catch (err) { handleError(res, err); }
 });
 
+// GET /accesorios/vendidos — historial de unidades vendidas sueltas
+router.get('/vendidos', verificaAuth, async (_req: Request, res: Response) => {
+  try {
+    const data = await accesorioService.listarAccesoriosVendidos();
+    res.json({ success: true, data });
+  } catch (err) { handleError(res, err); }
+});
+
 // POST /accesorios/asignar (ADMIN/TECNICO)
 router.post('/asignar', verificaAuth, verificaRol('ADMIN', 'TECNICO'), async (req: Request, res: Response) => {
   const parsed = accesorioService.asignarSchema.safeParse(req.body);

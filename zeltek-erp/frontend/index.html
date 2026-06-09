@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es" class="dark">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
@@ -8,6 +8,14 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <script>
+      try {
+        var stored = JSON.parse(localStorage.getItem('zeltek-theme') || 'null');
+        if (stored && stored.state && stored.state.theme === 'light') {
+          document.documentElement.classList.add('light');
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body class="bg-app-bg text-slate-100 font-sans">
     <div id="root"></div>

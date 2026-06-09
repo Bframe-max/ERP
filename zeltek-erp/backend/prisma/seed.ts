@@ -77,6 +77,7 @@ async function main() {
       { id: 'f3c90df7-512c-497d-aa9f-7d12f3b9c803', nombre: 'OPEX', saldo_usd: 0 },
       { id: 'f4d90df7-512c-497d-aa9f-7d12f3b9c804', nombre: 'REPARTO_SOCIO_A', saldo_usd: 0 },
       { id: 'f5e90df7-512c-497d-aa9f-7d12f3b9c805', nombre: 'REPARTO_ZELTEK', saldo_usd: 0 },
+      { id: 'f6f90df7-512c-497d-aa9f-7d12f3b9c806', nombre: 'CAPITAL', saldo_usd: 0 },
     ],
     skipDuplicates: true,
   });

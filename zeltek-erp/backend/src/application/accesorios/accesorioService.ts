@@ -295,6 +295,33 @@ export async function venderAccesorios(
   return venta;
 }
 
+// ─── Historial de ventas de accesorios ────────────────────────────────────────
+
+export async function listarAccesoriosVendidos() {
+  const vendidos = await prisma.accesorios_inventario.findMany({
+    where: { estado: 'vendido' },
+    include: {
+      categoria: { select: { nombre: true } },
+      venta_accesorio: {
+        include: { cliente: { select: { nombre: true } } },
+      },
+    },
+    orderBy: { updated_at: 'desc' },
+  });
+
+  return vendidos.map(a => ({
+    id: a.id,
+    categoria: a.categoria,
+    costo_unitario_usd: toNum(a.costo_unitario_usd),
+    venta: a.venta_accesorio ? {
+      numero_factura: a.venta_accesorio.numero_factura,
+      precio_venta_usd: toNum(a.venta_accesorio.precio_venta_usd),
+      fecha_venta: a.venta_accesorio.fecha_venta,
+      cliente: a.venta_accesorio.cliente?.nombre ?? null,
+    } : null,
+  }));
+}
+
 // ─── Categorías ───────────────────────────────────────────────────────────────
 
 export async function listarCategorias() {

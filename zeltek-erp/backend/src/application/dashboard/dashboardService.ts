@@ -19,6 +19,9 @@ export async function getKPIs() {
     inboxPendiente,
     reparacionesActivas,
     gastosMes,
+    capitalDisponible,
+    capitalTaller,
+    capitalAccesorios,
   ] = await Promise.all([
     prisma.equipos.groupBy({
       by: ['estado'],
@@ -37,13 +40,28 @@ export async function getKPIs() {
       _sum: { precio_venta_usd: true, ganancia_bruta_venta_usd: true },
     }),
     prisma.fondos_financieros.findMany(),
-    prisma.compras_pendientes.count({ where: { estado: 'pendiente_triage' } }),
+    prisma.compras_pendientes.count({ where: { estado: 'recibido' } }),
     prisma.ordenes_reparacion.count({
       where: { estado: { notIn: ['ENTREGADO', 'CANCELADO'] } },
     }),
     prisma.gastos_operativos.aggregate({
       where: { fecha: { gte: inicioMes } },
       _sum: { monto_usd: true },
+    }),
+    // Capital locked in DISPONIBLE inventory (using ctr_usd = full cost)
+    prisma.equipos.aggregate({
+      where: { estado: 'DISPONIBLE', deleted_at: null },
+      _sum: { ctr_usd: true },
+    }),
+    // Capital locked in taller
+    prisma.equipos.aggregate({
+      where: { estado: 'EN_TALLER', deleted_at: null },
+      _sum: { ctr_usd: true },
+    }),
+    // Capital in standalone accessories (not assigned to any equipo to avoid double-count)
+    prisma.accesorios_inventario.aggregate({
+      where: { estado: 'disponible' },
+      _sum: { costo_unitario_usd: true },
     }),
   ]);
 
@@ -86,6 +104,12 @@ export async function getKPIs() {
     inbox_pendiente: inboxPendiente,
     reparaciones_activas: reparacionesActivas,
     gastos_mes_usd: toNum(gastosMes._sum.monto_usd),
+    capital_dinamico: {
+      liquido: fondoMap['CAPITAL'] ?? 0,
+      disponible: toNum(capitalDisponible._sum.ctr_usd),
+      taller: toNum(capitalTaller._sum.ctr_usd),
+      accesorios: toNum(capitalAccesorios._sum.costo_unitario_usd),
+    },
   };
 }
 

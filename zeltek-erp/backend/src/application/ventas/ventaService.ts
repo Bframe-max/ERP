@@ -236,6 +236,29 @@ export async function registrarVenta(
     distribuirFondo('GARANTIAS', pfMontoGarantias, 'Profit First: Garantías');
     distribuirFondo('OPEX', pfMontoOpex, 'Profit First: OPEX');
 
+    // 5. Retorno de Costo de Reposición a Líquido (CAPITAL)
+    const fondoCapital = fondoMap['CAPITAL'];
+    if (fondoCapital && capitalRetornoInversor > 0) {
+      updatesFondos.push(
+        tx.fondos_financieros.update({
+          where: { id: fondoCapital.id },
+          data: { saldo_usd: { increment: capitalRetornoInversor } },
+        }),
+        tx.historial_fondos.create({
+          data: {
+            fondo_id: fondoCapital.id,
+            monto_usd: capitalRetornoInversor,
+            tipo: 'ingreso',
+            concepto: `Retorno de Capital (Reposición) — Venta ${numeroFactura}`,
+          },
+        })
+      );
+    }
+
+    // 6. Si el "Fondo de Reinversión" se inyecta automáticamente al CAPITAL:
+    // Puedes reemplazar 'GANANCIA' arriba para que se sume directamente aquí,
+    // o hacer transferencias manuales desde el fondo de Reinversión a CAPITAL.
+
     // Split REPARTO entre inversores activos
     // Nomenclatura: REPARTO_SOCIO_A, REPARTO_ZELTEK, etc.
     // Regla: tomar primeras palabras del nombre hasta que haya 2 palabras cortas (≤2 chars) o solo primera palabra
@@ -318,7 +341,7 @@ export async function listarVentas(params: {
       where,
       include: {
         equipo: { select: { marca: true, modelo: true, numero_serie: true } },
-        cliente: { select: { nombre: true, telefono: true } },
+        cliente: true,
         vendedor: { select: { nombre: true } },
       },
       orderBy: { fecha_venta: 'desc' },

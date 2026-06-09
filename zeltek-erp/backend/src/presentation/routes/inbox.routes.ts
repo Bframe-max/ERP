@@ -1,7 +1,26 @@
-import { Router, Request, Response } from 'express';
-import { verificaAuth } from '../middleware/verificaAuth';
+import { Router, Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
+import { verificaAuth, UsuarioPayload } from '../middleware/verificaAuth';
 import { verificaRol } from '../middleware/verificaRol';
 import * as inboxService from '../../application/inbox/inboxService';
+
+// Acepta API Key (n8n) o JWT (usuario manual)
+function authApiKeyOJwt(req: Request, res: Response, next: NextFunction): void {
+  const apiKey = req.headers['x-api-key'] as string | undefined;
+  if (apiKey) {
+    if (apiKey === process.env.API_KEY_N8N) { next(); return; }
+    res.status(401).json({ success: false, error: 'API key inválida' });
+    return;
+  }
+  const token = req.cookies['access_token'] as string | undefined;
+  if (!token) { res.status(401).json({ success: false, error: 'No autenticado' }); return; }
+  try {
+    req.usuario = jwt.verify(token, process.env.JWT_SECRET!) as UsuarioPayload;
+    next();
+  } catch {
+    res.status(401).json({ success: false, error: 'Token inválido o expirado' });
+  }
+}
 
 const router = Router();
 
@@ -21,20 +40,13 @@ function getIp(req: Request): string {
   return req.socket.remoteAddress ?? '';
 }
 
-// ─── POST /inbox — n8n deposita correo (API Key auth) ────────────────────────
-router.post('/', async (req: Request, res: Response) => {
-  const apiKey = req.headers['x-api-key'] as string | undefined;
-  if (apiKey !== process.env.API_KEY_N8N) {
-    res.status(401).json({ success: false, error: 'API key inválida' });
-    return;
-  }
-
+// ─── POST /inbox — n8n (API Key) o usuario manual (JWT ADMIN) ────────────────
+router.post('/', authApiKeyOJwt, async (req: Request, res: Response) => {
   const parsed = inboxService.depositarInboxSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ success: false, error: parsed.error.errors[0]?.message ?? 'Datos inválidos' });
     return;
   }
-
   try {
     const entrada = await inboxService.depositarInbox(parsed.data);
     res.status(201).json({ success: true, data: entrada });
@@ -63,6 +75,35 @@ router.get('/alertas', verificaAuth, verificaRol('ADMIN'), async (_req: Request,
   }
 });
 
+// ─── POST /inbox/:id/en-miami — Logística: recibido en bodega Miami + tracking interno ─
+// La agencia recibe el equipo en Miami y asigna su tracking interno (warehouse
+// track) en el mismo momento → pasa directo a "en tránsito a Nicaragua".
+router.post('/:id/en-miami', verificaAuth, verificaRol('ADMIN'), async (req: Request, res: Response) => {
+  const parsed = inboxService.marcarEnMiamiSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ success: false, error: parsed.error.errors[0]?.message ?? 'Datos inválidos' });
+    return;
+  }
+  try {
+    const entrada = await inboxService.marcarEnMiami(
+      req.params.id, parsed.data, req.usuario!.userId, getIp(req), req.headers['user-agent']
+    );
+    res.json({ success: true, data: entrada });
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+// ─── POST /inbox/:id/recibido — Logística: marcar recibido en Nicaragua ───────
+router.post('/:id/recibido', verificaAuth, verificaRol('ADMIN'), async (req: Request, res: Response) => {
+  try {
+    const entrada = await inboxService.marcarRecibido(req.params.id, req.usuario!.userId, getIp(req), req.headers['user-agent']);
+    res.json({ success: true, data: entrada });
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
 // ─── POST /inbox/:id/ingresar — Triage: ingresar a inventario ─────────────────
 router.post('/:id/ingresar', verificaAuth, verificaRol('ADMIN'), async (req: Request, res: Response) => {
   const parsed = inboxService.ingresarSchema.safeParse(req.body);
@@ -72,14 +113,14 @@ router.post('/:id/ingresar', verificaAuth, verificaRol('ADMIN'), async (req: Req
   }
 
   try {
-    const equipo = await inboxService.ingresarAlInventario(
+    const equipos = await inboxService.ingresarAlInventario(
       req.params.id,
       parsed.data,
       req.usuario!.userId,
       getIp(req),
       req.headers['user-agent']
     );
-    res.status(201).json({ success: true, data: equipo });
+    res.status(201).json({ success: true, data: equipos });
   } catch (err) {
     handleError(res, err);
   }

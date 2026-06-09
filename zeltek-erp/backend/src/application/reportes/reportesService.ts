@@ -27,7 +27,7 @@ export async function reporteVentas(params: z.infer<typeof reporteVentasSchema>)
     ...(params.vendedor_id && { vendedor_id: params.vendedor_id }),
   };
 
-  const [ventas, resumen] = await Promise.all([
+  const [ventas, resumen, inversores] = await Promise.all([
     prisma.ventas.findMany({
       where,
       include: {
@@ -50,6 +50,11 @@ export async function reporteVentas(params: z.infer<typeof reporteVentasSchema>)
         pf_monto_reparto_usd: true,
       },
     }),
+    prisma.inversores.findMany({
+      where: { activo: true },
+      select: { id: true, nombre: true, porcentaje_ganancia: true },
+      orderBy: { nombre: 'asc' },
+    }),
   ]);
 
   return {
@@ -64,11 +69,23 @@ export async function reporteVentas(params: z.infer<typeof reporteVentasSchema>)
       pf_opex_usd: toNum(resumen._sum.pf_monto_opex_usd),
       pf_reparto_usd: toNum(resumen._sum.pf_monto_reparto_usd),
     },
+    inversores: inversores.map(i => ({
+      id: i.id,
+      nombre: i.nombre,
+      porcentaje: toNum(i.porcentaje_ganancia),
+    })),
     ventas: ventas.map(v => ({
       ...v,
       precio_venta_usd: toNum(v.precio_venta_usd),
       ctr_al_momento_usd: toNum(v.ctr_al_momento_usd),
       ganancia_bruta_venta_usd: toNum(v.ganancia_bruta_venta_usd),
+      pf_monto_opex_usd: toNum(v.pf_monto_opex_usd),
+      pf_monto_garantias_usd: toNum(v.pf_monto_garantias_usd),
+      pf_monto_ganancia_usd: toNum(v.pf_monto_ganancia_usd),
+      pf_monto_reparto_usd: toNum(v.pf_monto_reparto_usd),
+      pf_tap_opex_aplicado: toNum(v.pf_tap_opex_aplicado),
+      pf_tap_garantias_aplicado: toNum(v.pf_tap_garantias_aplicado),
+      pf_tap_ganancia_aplicado: toNum(v.pf_tap_ganancia_aplicado),
     })),
   };
 }

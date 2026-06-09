@@ -26,7 +26,6 @@ const TRANSICIONES: Record<EstadoEquipo, EstadoEquipo[]> = {
 
 export interface ValidacionDisponible {
   peso_real_libras: number | null;
-  foto_urls: string[];
   requiere_cargador: boolean;
   tiene_cargador_asignado: boolean;
 }
@@ -63,13 +62,6 @@ export class EquipoStateMachine {
       throw new EquipoStateMachineError(
         'El equipo no puede marcarse como DISPONIBLE sin peso real registrado.',
         'PESO_REQUERIDO',
-      );
-    }
-
-    if (datos.foto_urls.length < 1) {
-      throw new EquipoStateMachineError(
-        'El equipo necesita al menos 1 foto antes de marcarse como DISPONIBLE.',
-        'FOTOS_REQUERIDAS',
       );
     }
 

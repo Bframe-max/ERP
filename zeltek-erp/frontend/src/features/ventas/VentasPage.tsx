@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, RefreshCw, ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { Plus, RefreshCw, ChevronLeft, ChevronRight, Search, Eye, CheckCircle, Wallet, Banknote, User, Phone, IdCard } from 'lucide-react';
 import api from '@/lib/api';
 import { Modal } from '@/components/Modal';
+import { TIMEZONE_NI } from '@/lib/utils';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
-interface EquipoDisponible {
+export interface EquipoDisponible {
   id: string;
   marca: string;
   modelo: string;
@@ -27,10 +28,15 @@ interface VentaRow {
   numero_factura: string;
   fecha_venta: string;
   precio_venta_usd: number | string;
+  ctr_al_momento_usd: number | string;
   ganancia_bruta_venta_usd: number | string;
+  pf_monto_opex_usd: number | string;
+  pf_monto_garantias_usd: number | string;
+  pf_monto_ganancia_usd: number | string;
+  pf_monto_reparto_usd: number | string;
   reparto_liquidado: boolean;
   equipo: { marca: string; modelo: string; numero_serie: string };
-  cliente: { nombre: string; telefono: string };
+  cliente: ClienteItem;
   vendedor: { nombre: string };
 }
 
@@ -41,19 +47,19 @@ function fmt(n: number | string) {
 }
 
 function fmtFecha(iso: string) {
-  return new Date(iso).toLocaleDateString('es-NI', { day: '2-digit', month: 'short', year: 'numeric' });
+  return new Date(iso).toLocaleDateString('es-NI', { day: '2-digit', month: 'short', year: 'numeric', timeZone: TIMEZONE_NI });
 }
 
 // ─── Modal Checkout ───────────────────────────────────────────────────────────
 
-function CheckoutModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
-  const [step, setStep] = useState<'equipo' | 'cliente' | 'pago'>('equipo');
+export function CheckoutModal({ onClose, onSuccess, equipoInicial }: { onClose: () => void; onSuccess: () => void; equipoInicial?: EquipoDisponible }) {
+  const [step, setStep] = useState<'equipo' | 'cliente' | 'pago'>(equipoInicial ? 'cliente' : 'equipo');
   const [equipos, setEquipos] = useState<EquipoDisponible[]>([]);
   const [clientes, setClientes] = useState<ClienteItem[]>([]);
   const [busqCliente, setBusqCliente] = useState('');
-  const [equipoSel, setEquipoSel] = useState<EquipoDisponible | null>(null);
+  const [equipoSel, setEquipoSel] = useState<EquipoDisponible | null>(equipoInicial ?? null);
   const [clienteSel, setClienteSel] = useState<ClienteItem | null>(null);
-  const [precio, setPrecio] = useState('');
+  const [precio, setPrecio] = useState(equipoInicial ? String(parseFloat(String(equipoInicial.precio_venta_sugerido_usd)).toFixed(2)) : '');
   const [metodoPago, setMetodoPago] = useState<'EFECTIVO' | 'TRANSFERENCIA_BAC' | 'USDT'>('EFECTIVO');
   const [moneda, setMoneda] = useState<'USD' | 'NIO' | 'MIXTO'>('USD');
   const [referencia, setReferencia] = useState('');
@@ -63,8 +69,9 @@ function CheckoutModal({ onClose, onSuccess }: { onClose: () => void; onSuccess:
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (equipoInicial) return;
     api.get<{ data: EquipoDisponible[] }>('/equipos/disponibles').then(r => setEquipos(r.data.data));
-  }, []);
+  }, [equipoInicial]);
 
   useEffect(() => {
     const q = busqCliente.trim();
@@ -260,7 +267,7 @@ function CheckoutModal({ onClose, onSuccess }: { onClose: () => void; onSuccess:
 
       {/* Navegación */}
       <div className="flex gap-3 pt-1">
-        {step !== 'equipo' && (
+        {step !== 'equipo' && !(equipoInicial && step === 'cliente') && (
           <button type="button"
             onClick={() => setStep(step === 'pago' ? 'cliente' : 'equipo')}
             className="px-4 py-2.5 rounded-xl border border-app-border text-slate-400 hover:text-slate-100 text-sm transition-colors">
@@ -286,6 +293,109 @@ function CheckoutModal({ onClose, onSuccess }: { onClose: () => void; onSuccess:
   );
 }
 
+// ─── Modal Detalle Venta ──────────────────────────────────────────────────────
+
+export function DetalleVentaModal({ venta, onClose, onLiquidar }: { venta: VentaRow; onClose: () => void; onLiquidar: () => void }) {
+  const [loading, setLoading] = useState(false);
+
+  async function liquidar() {
+    if (!confirm('¿Estás seguro de marcar esta venta como liquidada? Se asume que el dinero físico ya fue entregado.')) return;
+    setLoading(true);
+    try {
+      await api.patch(`/ventas/${venta.id}/liquidar`);
+      onLiquidar();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Error al liquidar');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Información General */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-slate-800/40 p-4 rounded-xl border border-app-border">
+          <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-2 flex items-center gap-1"><User size={14} /> Cliente</p>
+          <p className="text-slate-100 font-medium">{venta.cliente.nombre}</p>
+          <p className="text-slate-400 text-sm flex items-center gap-1 mt-1"><Phone size={12} /> {venta.cliente.telefono}</p>
+          {venta.cliente.cedula && <p className="text-slate-400 text-sm flex items-center gap-1 mt-1"><IdCard size={12} /> {venta.cliente.cedula}</p>}
+        </div>
+        <div className="bg-slate-800/40 p-4 rounded-xl border border-app-border">
+          <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-2">Equipo Vendido</p>
+          <p className="text-slate-100 font-medium">{venta.equipo.marca} {venta.equipo.modelo}</p>
+          <p className="text-slate-400 text-sm font-mono mt-1">S/N: {venta.equipo.numero_serie}</p>
+        </div>
+      </div>
+
+      {/* Matemática de Venta */}
+      <div className="bg-slate-800/40 rounded-xl border border-app-border overflow-hidden">
+        <div className="p-3 bg-slate-800/80 border-b border-app-border">
+          <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Matemática de Venta</p>
+        </div>
+        <div className="p-4 space-y-2 text-sm">
+          <div className="flex justify-between items-center text-slate-100">
+            <span>Precio de Venta</span>
+            <span className="font-mono font-medium">{fmt(venta.precio_venta_usd)}</span>
+          </div>
+          <div className="flex justify-between items-center text-danger">
+            <span>Menos (-) Capital Retornado (CTR)</span>
+            <span className="font-mono font-medium">-{fmt(venta.ctr_al_momento_usd)}</span>
+          </div>
+          <div className="pt-2 border-t border-app-border/50 flex justify-between items-center text-success font-semibold text-base">
+            <span>Ganancia Bruta</span>
+            <span className="font-mono">{fmt(venta.ganancia_bruta_venta_usd)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Distribución Profit First */}
+      <div className="bg-slate-800/40 rounded-xl border border-app-border overflow-hidden">
+        <div className="p-3 bg-slate-800/80 border-b border-app-border">
+          <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Distribución Profit First</p>
+        </div>
+        <div className="p-4 space-y-3 text-sm">
+          <div className="flex justify-between items-center text-slate-300">
+            <span className="flex items-center gap-2"><Banknote size={14} className="text-blue-400" /> Fondo OPEX</span>
+            <span className="font-mono font-medium">{fmt(venta.pf_monto_opex_usd)}</span>
+          </div>
+          <div className="flex justify-between items-center text-slate-300">
+            <span className="flex items-center gap-2"><RefreshCw size={14} className="text-amber-400" /> Fondo Reinversión</span>
+            <span className="font-mono font-medium">{fmt(venta.pf_monto_garantias_usd)}</span>
+          </div>
+          <div className="flex justify-between items-center text-slate-300">
+            <span className="flex items-center gap-2"><Wallet size={14} className="text-emerald-400" /> Ganancia Neta Zeltek</span>
+            <span className="font-mono font-medium">{fmt(venta.pf_monto_ganancia_usd)}</span>
+          </div>
+          
+          {parseFloat(String(venta.pf_monto_reparto_usd)) > 0 && (
+            <div className="pt-3 border-t border-app-border/50 flex justify-between items-center text-indigo-300">
+              <span className="flex items-center gap-2"><User size={14} /> Reparto Socio(s)</span>
+              <span className="font-mono font-semibold">{fmt(venta.pf_monto_reparto_usd)}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Acción Liquidar */}
+      {venta.reparto_liquidado ? (
+        <div className="bg-success/10 border border-success/30 text-success p-4 rounded-xl flex items-center justify-center gap-2 font-medium">
+          <CheckCircle size={18} />
+          Fondos Liquidados (Dinero físico separado)
+        </div>
+      ) : (
+        <button 
+          onClick={liquidar}
+          disabled={loading}
+          className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-semibold transition-colors disabled:opacity-50"
+        >
+          {loading ? 'Liquidando...' : 'Apartar Fondos / Liquidar Reparto'}
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 export function VentasPage() {
@@ -294,6 +404,7 @@ export function VentasPage() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [showCheckout, setShowCheckout] = useState(false);
+  const [ventaSeleccionada, setVentaSeleccionada] = useState<VentaRow | null>(null);
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -350,6 +461,7 @@ export function VentasPage() {
                   <th className="text-right px-4 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Precio</th>
                   <th className="text-right px-4 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider hidden sm:table-cell">Ganancia</th>
                   <th className="text-center px-4 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider hidden lg:table-cell">Reparto</th>
+                  <th className="px-4 py-3"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-app-border">
@@ -379,6 +491,15 @@ export function VentasPage() {
                         {v.reparto_liquidado ? 'Liquidado' : 'Pendiente'}
                       </span>
                     </td>
+                    <td className="px-4 py-3 text-right">
+                      <button 
+                        onClick={() => setVentaSeleccionada(v)}
+                        className="p-1.5 text-slate-400 hover:text-violet-400 hover:bg-violet-400/10 rounded-lg transition-colors"
+                        title="Ver detalle"
+                      >
+                        <Eye size={16} />
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -405,6 +526,19 @@ export function VentasPage() {
 
       <Modal open={showCheckout} onClose={() => setShowCheckout(false)} title="Nueva Venta" maxWidth="max-w-xl">
         <CheckoutModal onClose={() => setShowCheckout(false)} onSuccess={cargar} />
+      </Modal>
+
+      <Modal open={!!ventaSeleccionada} onClose={() => setVentaSeleccionada(null)} title={`Desglose: ${ventaSeleccionada?.numero_factura}`} maxWidth="max-w-2xl">
+        {ventaSeleccionada && (
+          <DetalleVentaModal 
+            venta={ventaSeleccionada} 
+            onClose={() => setVentaSeleccionada(null)} 
+            onLiquidar={() => {
+              setVentaSeleccionada(null);
+              cargar();
+            }}
+          />
+        )}
       </Modal>
     </div>
   );

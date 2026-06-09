@@ -38,7 +38,6 @@ export interface Equipo {
   ctr_usd: number;
   precio_venta_sugerido_usd: number;
   precio_venta_usd: number | null;
-  foto_urls: string[];
   visible_en_inventario: boolean;
   requiere_cargador: boolean;
   costo_accesorios_usd: number;
